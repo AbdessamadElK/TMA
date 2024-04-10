@@ -1,0 +1,9 @@
+numpy
+numba
+h5py
+hdf5plugin
+tqdm
+imageio
+opencv-python
+wandb
+coloredlogs
