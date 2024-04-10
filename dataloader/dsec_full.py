@@ -170,6 +170,8 @@ class DataPrefetcher():
         if None in [voxel1, voxel2, flow_map, valid2D]:
             raise StopIteration
         
+        self.prefetch()
+
         return voxel1, voxel2, flow_map, valid2D
     
     
