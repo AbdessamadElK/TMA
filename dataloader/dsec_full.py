@@ -195,6 +195,12 @@ def flow_16bit_to_float(flow_16bit: np.ndarray):
     return flow_map, valid2D
 
 
+def collate_fn(batch):
+    #len(batch) = 6
+    print(type(batch[0][0]))
+    raise NotImplementedError
+
+
 def make_data_loader(phase, batch_size, num_workers):
     dset = DSECfull(phase)
     loader = data.DataLoader(
@@ -202,7 +208,8 @@ def make_data_loader(phase, batch_size, num_workers):
         batch_size=batch_size,
         num_workers=num_workers,
         shuffle=True,
-        drop_last=True)
+        drop_last=True,
+        collate_fn=collate_fn)
     prefetcher = DataPrefetcher(loader, phase = phase)
     return loader, prefetcher
 
