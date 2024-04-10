@@ -78,7 +78,7 @@ class Trainer:
 
 
         #Loader
-        self.train_loader = make_data_loader('trainval', args.batch_size, args.num_workers)
+        self.train_loader, self.train_prefetcher = make_data_loader('trainval', args.batch_size, args.num_workers)
         print('train_loader done!')
 
         #Optimizer and scheduler for training
@@ -136,7 +136,7 @@ class Trainer:
         keep_training = True
         while keep_training:
 
-            bar = tqdm(enumerate(self.train_loader),total=len(self.train_loader), ncols=60)
+            bar = tqdm(enumerate(self.train_prefetcher),total=len(self.train_prefetcher), ncols=60)
             for index, (voxel1, voxel2, flow_map, valid2D) in bar:
                 # voxel1, voxel2, flow_map, valid2D = self.apply_transforms(data_items)
                 self.optimizer.zero_grad()

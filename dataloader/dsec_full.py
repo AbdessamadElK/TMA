@@ -62,30 +62,15 @@ class DSECfull(data.Dataset):
         #events
         events_file = np.load(self.files[index])
         events1 = events_file['events_prev']
-        x = events1[:, 0]
-        y = events1[:, 1]
-        t = events1[:, 2]
-        p = events1[:, 3]
-        voxel1 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).numpy()
-
         events2 = events_file['events_curr']
-        x = events2[:, 0]
-        y = events2[:, 1]
-        t = events2[:, 2]
-        p = events2[:, 3]
-        voxel2 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).numpy()        
+          
 
         #flow
         if self.phase == "train" or self.phase == "trainval":
             flow_16bit = np.load(self.flows[index])
             flow_map, valid2D = flow_16bit_to_float(flow_16bit)
-            voxel1, voxel2, flow_map, valid2D = self.augmentor(voxel1, voxel2, flow_map, valid2D)
-
-            flow_map = torch.from_numpy(flow_map).permute(2, 0, 1).float()
-            valid2D = torch.from_numpy(valid2D).float()
         
-        voxel1 = torch.from_numpy(voxel1).permute(2, 0, 1).float()
-        voxel2 = torch.from_numpy(voxel2).permute(2, 0, 1).float()
+       
 
         if self.phase == "test":
             # Include submission coordinates (seuence name, file index)
@@ -93,15 +78,100 @@ class DSECfull(data.Dataset):
             sequence_name = file_path.parent.name
             file_index = int(file_path.stem)
             submission_coords = (sequence_name, file_index)
-            return voxel1, voxel2, submission_coords
+            return events1, events2, submission_coords
         
-        return voxel1, voxel2, flow_map, valid2D
+        return events1, events2, flow_map, valid2D
 
-
-
-    
     def __len__(self):
         return len(self.files)
+    
+
+
+class DataPrefetcher():
+    def __init__(self, dataloader, phase):
+        """
+        This DataPrefetcher class as its name indicates, prefetches the raw data on the GPU. It performs data preprocessing on
+        the GPU in order to speed up the training process.
+        """
+        assert phase in ["train", "trainval", "test"]
+        self.dataloader = dataloader
+        self.representation = VoxelGrid((15, 480, 640), normalize=True)
+        self._len = len(dataloader)
+
+
+
+    def prefetch(self):
+        try:
+            self.events1, self.events2, self.next_flow, self.next_valid = next(self.dl_iter)
+        except StopIteration:
+            self.events1, self.events2, self.next_flow, self.next_valid = [None, None, None, None]
+            return
+        
+        # To cuda
+        self.events1 = self.events1.cuda()
+        self.events2 = self.events2.cuda()
+        self.next_flow = self.next_flow.cuda()
+        self.next_valid = self.next_valid.cuda()
+        
+        # Convert events to voxel grids
+        x = self.events1[:, 0]
+        y = self.events1[:, 1]
+        t = self.events1[:, 2]
+        p = self.events1[:, 3]
+        self.next_voxel1 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).numpy()
+
+        x = self.events2[:, 0]
+        y = self.events2[:, 1]
+        t = self.events2[:, 2]
+        p = self.events2[:, 3]
+        self.next_voxel2 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).numpy()
+
+        # Apply data augmentation
+        if self.phase == "train" or self.phase == "trainval":
+           
+            augmented = self.augmentor(self.next_voxel1, self.next_voxel2, self.next_flow, self.next_valid)
+
+            self.next_voxel1, self.next_voxel2, self.next_flow, self.next_valid = augmented
+
+            self.next_flow = torch.from_numpy(self.next_flow).permute(2, 0, 1).float()
+            self.next_valid = torch.from_numpy(self.next_valid).float()
+
+        self.next_voxel1 = torch.from_numpy(self.next_voxel1).permute(2, 0, 1).float()
+        self.next_voxel2 = torch.from_numpy(self.next_voxel2).permute(2, 0, 1).float()
+        
+    def events_to_voxel_grid(self, x, y, p, t):
+        t = (t - t[0]).astype('float32')
+        t = (t/t[-1])
+        x = x.astype('float32')
+        y = y.astype('float32')
+        pol = p.astype('float32')
+        event_data_torch = {
+            'p': torch.from_numpy(pol),
+            't': torch.from_numpy(t),
+            'x': torch.from_numpy(x),
+            'y': torch.from_numpy(y),
+            }
+        return self.representation.convert(event_data_torch)
+    
+    def __len__(self):
+        return self._len
+
+    def __iter__(self):
+        self.dl_iter = iter(self.dataloader)
+        self.prefetch()
+        pass
+
+    def __next__(self):
+        voxel1 = self.next_voxel1
+        voxel2 = self.next_voxel2
+        flow_map = self.next_flow
+        valid2D = self.next_valid
+
+        if None in [voxel1, voxel2, flow_map, valid2D]:
+            raise StopIteration
+        
+        return voxel1, voxel2, flow_map, valid2D
+    
     
 def flow_16bit_to_float(flow_16bit: np.ndarray):
     assert flow_16bit.dtype == np.uint16
@@ -131,7 +201,8 @@ def make_data_loader(phase, batch_size, num_workers):
         num_workers=num_workers,
         shuffle=True,
         drop_last=True)
-    return loader
+    prefetcher = DataPrefetcher(loader, phase = phase)
+    return loader, prefetcher
 
 if __name__ == '__main__':
 
