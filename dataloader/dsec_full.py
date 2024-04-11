@@ -95,61 +95,88 @@ class DataPrefetcher():
         """
         assert phase in ["train", "trainval", "test"]
         self.dataloader = dataloader
+        self.phase = phase
         self.representation = VoxelGrid((15, 480, 640), normalize=True)
         self._len = len(dataloader)
+
+        self.augmentor = Augmentor(crop_size=[288, 384])
 
 
 
     def prefetch(self):
         try:
-            self.events1, self.events2, self.next_flow, self.next_valid = next(self.dl_iter)
+            # Iterator returns a list of 6 tuples, each contain (events1, events2, flow, valid)
+            raw_batch = next(self.dl_iter)
+    
         except StopIteration:
-            self.events1, self.events2, self.next_flow, self.next_valid = [None, None, None, None]
+            self.next_voxel1 = None
+            self.next_voxel2 = None
+            self.next_flow = None
+            self.next_valid = None
             return
         
-        # To cuda
-        self.events1 = self.events1.cuda()
-        self.events2 = self.events2.cuda()
-        self.next_flow = self.next_flow.cuda()
-        self.next_valid = self.next_valid.cuda()
-        
-        # Convert events to voxel grids
-        x = self.events1[:, 0]
-        y = self.events1[:, 1]
-        t = self.events1[:, 2]
-        p = self.events1[:, 3]
-        self.next_voxel1 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).numpy()
+        self.next_voxel1 = []
+        self.next_voxel2 = []
+        self.next_flow = []
+        self.next_valid = []
 
-        x = self.events2[:, 0]
-        y = self.events2[:, 1]
-        t = self.events2[:, 2]
-        p = self.events2[:, 3]
-        self.next_voxel2 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).numpy()
+        for elements in raw_batch:
+            # Unpack data
+            events1, events2, flow, valid = elements
 
-        # Apply data augmentation
-        if self.phase == "train" or self.phase == "trainval":
-           
-            augmented = self.augmentor(self.next_voxel1, self.next_voxel2, self.next_flow, self.next_valid)
+            # To cuda
+            events1 = torch.from_numpy(events1).cuda()
+            events2 = torch.from_numpy(events2).cuda()
+            
+            # Convert events to voxel grids (on CUDA)
+            x = events1[:, 0]
+            y = events1[:, 1]
+            t = events1[:, 2]
+            p = events1[:, 3]
+            voxel1 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).cpu().numpy()
 
-            self.next_voxel1, self.next_voxel2, self.next_flow, self.next_valid = augmented
+            x = events2[:, 0]
+            y = events2[:, 1]
+            t = events2[:, 2]
+            p = events2[:, 3]
+            voxel2 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).cpu().numpy()
 
-            self.next_flow = torch.from_numpy(self.next_flow).permute(2, 0, 1).float()
-            self.next_valid = torch.from_numpy(self.next_valid).float()
+            # Apply data augmentation
+            if self.phase == "train" or self.phase == "trainval":
+            
+                augmented = self.augmentor(voxel1, voxel2, flow, valid)
 
-        self.next_voxel1 = torch.from_numpy(self.next_voxel1).permute(2, 0, 1).float()
-        self.next_voxel2 = torch.from_numpy(self.next_voxel2).permute(2, 0, 1).float()
+                voxel1, voxel2, flow, valid = augmented
+
+                flow = torch.from_numpy(flow).permute(2, 0, 1).float()
+                valid = torch.from_numpy(valid).float()
+
+            voxel1 = torch.from_numpy(voxel1).permute(2, 0, 1).float()
+            voxel2 = torch.from_numpy(voxel2).permute(2, 0, 1).float()
+
+            # Append to output
+            self.next_voxel1.append(voxel1)
+            self.next_voxel2.append(voxel2)
+            self.next_flow.append(flow)
+            self.next_valid.append(valid)
+
+        # Convert output to torch tensor
+        self.next_voxel1 = torch.stack(self.next_voxel1)
+        self.next_voxel2 = torch.stack(self.next_voxel2)
+        self.next_flow = torch.stack(self.next_flow)
+        self.next_valid = torch.stack(self.next_valid)
         
     def events_to_voxel_grid(self, x, y, p, t):
-        t = (t - t[0]).astype('float32')
+        t = (t - t[0]).float()
         t = (t/t[-1])
-        x = x.astype('float32')
-        y = y.astype('float32')
-        pol = p.astype('float32')
+        # x = x.float()
+        # y = y.float()
+        # pol = p.float()
         event_data_torch = {
-            'p': torch.from_numpy(pol),
-            't': torch.from_numpy(t),
-            'x': torch.from_numpy(x),
-            'y': torch.from_numpy(y),
+            'p': p.float(),
+            't': t,
+            'x': x.float(),
+            'y': y.float(),
             }
         return self.representation.convert(event_data_torch)
     
@@ -159,7 +186,7 @@ class DataPrefetcher():
     def __iter__(self):
         self.dl_iter = iter(self.dataloader)
         self.prefetch()
-        pass
+        return self
 
     def __next__(self):
         voxel1 = self.next_voxel1
@@ -196,9 +223,8 @@ def flow_16bit_to_float(flow_16bit: np.ndarray):
 
 
 def collate_fn(batch):
-    #len(batch) = 6
-    print(type(batch[0][0]))
-    raise NotImplementedError
+    #Just return the batch as is, it will be later treated by the data prefetcher
+    return batch
 
 
 def make_data_loader(phase, batch_size, num_workers):
