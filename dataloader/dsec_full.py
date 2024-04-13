@@ -16,7 +16,6 @@ class DSECfull(data.Dataset):
 
         self.init_seed = False
         self.phase = phase
-        self.representation = VoxelGrid((15, 480, 640), normalize=True)
         self.files = []
         self.flows = []
 
@@ -34,20 +33,6 @@ class DSECfull(data.Dataset):
 
         self.flows = glob.glob(os.path.join(self.root, '*', 'flow_*.npy'))
         self.flows.sort()
-
-    def events_to_voxel_grid(self, x, y, p, t):
-        t = (t - t[0]).astype('float32')
-        t = (t/t[-1])
-        x = x.astype('float32')
-        y = y.astype('float32')
-        pol = p.astype('float32')
-        event_data_torch = {
-            'p': torch.from_numpy(pol),
-            't': torch.from_numpy(t),
-            'x': torch.from_numpy(x),
-            'y': torch.from_numpy(y),
-            }
-        return self.representation.convert(event_data_torch)
 
     
     def __getitem__(self, index):
@@ -90,8 +75,9 @@ class DSECfull(data.Dataset):
 class DataPrefetcher():
     def __init__(self, dataloader, phase):
         """
-        This DataPrefetcher class as its name indicates, prefetches the raw data on the GPU. It performs data preprocessing on
-        the GPU in order to speed up the training process.
+        The DataPrefetcher class takes a dataloader that provides raw data (raw events and optical flow),
+        then It transforms the events into volumetric voxel grids on the GPU for faster performance, and applies
+        data augmentation.
         """
         assert phase in ["train", "trainval", "test"]
         self.dataloader = dataloader
@@ -160,7 +146,7 @@ class DataPrefetcher():
             self.next_flow.append(flow)
             self.next_valid.append(valid)
 
-        # Convert output to torch tensor
+        # Convert outputs to torch tensor
         self.next_voxel1 = torch.stack(self.next_voxel1)
         self.next_voxel2 = torch.stack(self.next_voxel2)
         self.next_flow = torch.stack(self.next_flow)
@@ -169,9 +155,6 @@ class DataPrefetcher():
     def events_to_voxel_grid(self, x, y, p, t):
         t = (t - t[0]).float()
         t = (t/t[-1])
-        # x = x.float()
-        # y = y.float()
-        # pol = p.float()
         event_data_torch = {
             'p': p.float(),
             't': t,
@@ -222,11 +205,6 @@ def flow_16bit_to_float(flow_16bit: np.ndarray):
     return flow_map, valid2D
 
 
-def collate_fn(batch):
-    #Just return the batch as is, it will be later treated by the data prefetcher
-    return batch
-
-
 def make_data_loader(phase, batch_size, num_workers):
     dset = DSECfull(phase)
     loader = data.DataLoader(
@@ -235,8 +213,9 @@ def make_data_loader(phase, batch_size, num_workers):
         num_workers=num_workers,
         shuffle=True,
         drop_last=True,
-        collate_fn=collate_fn)
-    prefetcher = DataPrefetcher(loader, phase = phase)
+        collate_fn=lambda batch : batch)
+    # The collate_fn returns the batch as is, given that it will be treated later by the DataPrefetcher
+    prefetcher = DataPrefetcher(loader, phase)
     return loader, prefetcher
 
 if __name__ == '__main__':
