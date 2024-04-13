@@ -12,6 +12,7 @@ from .representation import VoxelGrid
 class DSECsplit(data.Dataset):
     def __init__(self, phase):
         self.init_seed = False
+        assert phase in ["train", "val"]
         self.phase = phase
         self.representation = VoxelGrid((15, 480, 640), normalize=True)
         self.files = []
@@ -58,33 +59,124 @@ class DSECsplit(data.Dataset):
         #events
         events_file = np.load(self.files[index])
         events1 = events_file['events_prev']
-        x = events1[:, 0]
-        y = events1[:, 1]
-        t = events1[:, 2]
-        p = events1[:, 3]
-        voxel1 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).numpy()
-
         events2 = events_file['events_curr']
-        x = events2[:, 0]
-        y = events2[:, 1]
-        t = events2[:, 2]
-        p = events2[:, 3]
-        voxel2 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).numpy()        
 
         #flow
         flow_16bit = np.load(self.flows[index])
         flow_map, valid2D = flow_16bit_to_float(flow_16bit)
-        if self.phase == 'train':
-            voxel1, voxel2, flow_map, valid2D = self.augmentor(voxel1, voxel2, flow_map, valid2D)
-        
-        voxel1 = torch.from_numpy(voxel1).permute(2, 0, 1).float()
-        voxel2 = torch.from_numpy(voxel2).permute(2, 0, 1).float()
-        flow_map = torch.from_numpy(flow_map).permute(2, 0, 1).float()
-        valid2D = torch.from_numpy(valid2D).float()
-        return voxel1, voxel2, flow_map, valid2D
+
+        return events1, events2, flow_map, valid2D
     
     def __len__(self):
         return len(self.files)
+    
+
+class DataPrefetcherSplit():
+    def __init__(self, dataloader, phase, augment = False):
+        """
+        The DataPrefetcherSplit class takes a dataloader that provides raw data (raw events and optical flow),
+        then It transforms the events into volumetric voxel grids on the GPU for faster performance, and applies
+        data augmentation.
+        """
+        assert phase in ["train", "val"]
+        self.dataloader = dataloader
+        self.phase = phase
+        self.representation = VoxelGrid((15, 480, 640), normalize=True)
+        self._len = len(dataloader)
+
+        self.augment = augment
+        self.augmentor = Augmentor(crop_size=[288, 384])
+
+    def prefetch(self):
+        try:
+            # Iterator returns a list of batch_size tuples, each contain (events1, events2, flow, valid)
+            raw_batch = next(self.dl_iter)
+    
+        except StopIteration:
+            self.next_voxel1 = None
+            self.next_voxel2 = None
+            self.next_flow = None
+            self.next_valid = None
+            return
+        
+        self.next_voxel1 = []
+        self.next_voxel2 = []
+        self.next_flow = []
+        self.next_valid = []
+
+        for elements in raw_batch:
+            # Unpack data
+            events1, events2, flow, valid = elements
+
+            # To cuda
+            events1 = torch.from_numpy(events1).cuda()
+            events2 = torch.from_numpy(events2).cuda()
+            
+            # Convert events to voxel grids (on CUDA)
+            x = events1[:, 0]
+            y = events1[:, 1]
+            t = events1[:, 2]
+            p = events1[:, 3]
+            voxel1 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).cpu().numpy()
+
+            x = events2[:, 0]
+            y = events2[:, 1]
+            t = events2[:, 2]
+            p = events2[:, 3]
+            voxel2 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).cpu().numpy()
+
+            # Apply data augmentation
+            if self.phase == "train" and self.augment:
+                voxel1, voxel2, flow, valid = self.augmentor(voxel1, voxel2, flow, valid)
+
+            voxel1 = torch.from_numpy(voxel1).permute(2, 0, 1).float()
+            voxel2 = torch.from_numpy(voxel2).permute(2, 0, 1).float()
+            flow = torch.from_numpy(flow).permute(2, 0, 1).float()
+            valid = torch.from_numpy(valid).float()
+
+            # Append to output
+            self.next_voxel1.append(voxel1)
+            self.next_voxel2.append(voxel2)
+            self.next_flow.append(flow)
+            self.next_valid.append(valid)
+
+        # Convert outputs to torch tensor
+        self.next_voxel1 = torch.stack(self.next_voxel1)
+        self.next_voxel2 = torch.stack(self.next_voxel2)
+        self.next_flow = torch.stack(self.next_flow)
+        self.next_valid = torch.stack(self.next_valid)
+        
+    def events_to_voxel_grid(self, x, y, p, t):
+        t = (t - t[0]).float()
+        t = (t/t[-1])
+        event_data_torch = {
+            'p': p.float(),
+            't': t,
+            'x': x.float(),
+            'y': y.float(),
+            }
+        return self.representation.convert(event_data_torch)
+    
+    def __len__(self):
+        return self._len
+
+    def __iter__(self):
+        self.dl_iter = iter(self.dataloader)
+        self.prefetch()
+        return self
+
+    def __next__(self):
+        voxel1 = self.next_voxel1
+        voxel2 = self.next_voxel2
+        flow_map = self.next_flow
+        valid2D = self.next_valid
+
+        if None in [voxel1, voxel2, flow_map, valid2D]:
+            raise StopIteration
+        
+        self.prefetch()
+
+        return voxel1, voxel2, flow_map, valid2D
     
 def flow_16bit_to_float(flow_16bit: np.ndarray):
     assert flow_16bit.dtype == np.uint16
@@ -106,15 +198,18 @@ def flow_16bit_to_float(flow_16bit: np.ndarray):
     return flow_map, valid2D
 
 
-def make_data_loader(phase, batch_size, num_workers):
+def make_data_loader(phase, batch_size, num_workers, data_augmentation = False):
     dset = DSECsplit(phase)
     loader = data.DataLoader(
         dset,
         batch_size=batch_size,
         num_workers=num_workers,
         shuffle=True,
-        drop_last=True)
-    return loader
+        drop_last=True,
+        collate_fn=lambda batch:batch)
+    # The collate_fn returns the batch as is, and it will be dealt with later by the prefetcher  
+    prefetcher = DataPrefetcherSplit(loader, phase, augment=data_augmentation)
+    return loader, prefetcher
 
 if __name__ == '__main__':
 

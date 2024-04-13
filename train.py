@@ -21,6 +21,7 @@ from flow_vis import flow_to_color
 MAX_FLOW = 400
 SUM_FREQ = 100
 VIS_FREQ = 5000
+SAVE_FREQ = 10000
 
 CROP_HEIGTH = 288
 CROP_WIDTH = 384
@@ -72,13 +73,11 @@ class Trainer:
         if not os.path.isdir(self.save_path):
             os.makedirs(self.save_path)
 
-        #Transforms
-        self.crop = args.crop
-        self.hflip = args.hflip
-
+        #Data augmentation
+        self.augment = args.augment
 
         #Loader
-        self.train_loader, self.train_prefetcher = make_data_loader('trainval', args.batch_size, args.num_workers)
+        self.train_loader, self.train_prefetcher = make_data_loader('trainval', args.batch_size, args.num_workers, data_augmentation=self.augment)
         print('train_loader done!')
 
         #Optimizer and scheduler for training
@@ -103,23 +102,16 @@ class Trainer:
 
         
         #Loading checkpoint
+        self.old_ckpt_path = args.restore_ckpt_path
         self.continue_training = args.continue_training
-        self.old_ckpt_path = args.model_path
         self.previous_step = None
 
-        if self.old_ckpt_path == "":
-            if self.continue_training:
-                print("Cannot continue training without a pretrained model checkpoint. Please provide '--model_path'")
-                self.continue_training = False
-        else:
+        if not self.old_ckpt_path == "":
             if os.path.isfile(self.old_ckpt_path):
-                params_ckpt_path = os.path.join(os.path.dirname(self.old_ckpt_path), "params_checkpoint")
-                params_ckpt_path = params_ckpt_path if self.continue_training else None
-                self.previous_step = self.load_ckpt(self.old_ckpt_path, params_ckpt_path)
-                self.scheduler.total_steps = self.args.num_steps - self.previous_step + 1
+                self.previous_step = self.load_ckpt(self.old_ckpt_path, self.continue_training)
                 self.writer.info(f"Loaded the checkpoint at '{self.old_ckpt_path}'.")
                 if self.continue_training:
-                    self.writer.info("Loaded parameters for continuous learning.")
+                    self.writer.info("Also loaded parameters for continuous learning.")
             else:
                 print("Couldn't find a checkpoint file at '{}'".format(self.old_ckpt_path))
 
@@ -158,42 +150,45 @@ class Trainer:
                         flow_sample = flow_preds[-1][0]
                         visualization = flow_to_color(flow_sample.cpu().numpy().transpose(1, 2, 0), convert_to_bgr = False)
                         wandb.log({'Optical Flow': wandb.Image(visualization, caption=f"Visualization {vis_steps}")})
-                if total_steps and total_steps % 10000 == 0:
-                    ckpt = os.path.join(self.save_path, f'checkpoint_{total_steps}.pth')
-                    torch.save(self.model.state_dict(), ckpt)
+
+                if total_steps and total_steps % SAVE_FREQ == 0:
+                    # Save model checkpoint
+                    ckpt = os.path.join(self.save_path, f'checkpoint_{total_steps}')
+
+                    # Save checkpoint with parameters for continuous training
+                    params_state = {"step":total_steps,
+                            "model":self.model.state_dict(),
+                            "optimizer":self.optimizer.state_dict(),
+                            "scheduler":self.scheduler.state_dict(),
+                            "loss_tracker":self.tracker.state_dict()}
+
+                    torch.save(params_state, ckpt)
+
                 if total_steps > self.args.num_steps:
                     keep_training = False
                     break
             
             time.sleep(0.03)
         
-        # Save checkpoint
-        params_state = {"step":total_steps,
-                 "optimizer":self.optimizer.state_dict(),
-                 "scheduler":self.scheduler.state_dict(),
-                 "loss_tracker":self.tracker.state_dict()}
-        
-        params_ckpt_path = os.path.join(self.save_path, 'params_checkpoint')
+        # Save the final checkpoint
         model_ckpt_path = os.path.join(self.save_path, "checkpoint.pth")
-        torch.save(params_state, params_ckpt_path)
         torch.save(self.model.state_dict(), model_ckpt_path)
 
         return model_ckpt_path
     
-    def load_ckpt(self, ckpt_path:str, params_ckpt_path):
+    def load_ckpt(self, ckpt_path:str, continuous = False):
         if os.path.isfile(ckpt_path):
             # Load the model
             checkpoint = torch.load(ckpt_path)
-            self.model.load_state_dict(checkpoint, strict=False)
+            self.model.load_state_dict(checkpoint["model"], strict=False)
 
             # Load training params
-            if params_ckpt_path is not None:
-                params_checkpoint = torch.load(params_ckpt_path)
-                self.optimizer.load_state_dict(params_checkpoint["optimizer"])
-                self.scheduler.load_state_dict(params_checkpoint["scheduler"])
-                self.tracker.load_state_dict(params_checkpoint["loss_tracker"])
+            if continuous:
+                self.optimizer.load_state_dict(checkpoint["optimizer"])
+                self.scheduler.load_state_dict(checkpoint["scheduler"])
+                self.tracker.load_state_dict(checkpoint["loss_tracker"])
 
-                return params_checkpoint["step"]
+                return checkpoint["step"]
         else:
             print("Warning : No checkpoint was found at '{}'".format(ckpt_path))
 
@@ -272,12 +267,11 @@ if __name__=='__main__':
     parser.add_argument('--wandb', action='store_true', default=False)
 
     #Loading pretrained models
-    parser.add_argument('--model_path', type=str, default="", help="Path to existing model to be loaded")
+    parser.add_argument('--restore_ckpt_path', type=str, default="", help="Path to existing checkpoint to be loaded")
     parser.add_argument('--continue_training', action='store_true', default=False, help="Continue learning with previous params")
     
     #Data augmentation
-    parser.add_argument('--crop', action="store_true", default=False, help = "Activate random cropping to (288,384)")
-    parser.add_argument('--hflip', action="store_true", default=False, help="Activate horizontal flipping")
+    parser.add_argument('--augment', action="store_true", default=False, help = "Activate data augmentation : Random Cropping to (288,384), Horizontal Flip, Vertical Flip, and Spacial Transforms.")
     
     args = parser.parse_args()
     set_seed(1)

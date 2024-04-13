@@ -11,22 +11,16 @@ from .augment import Augmentor
 from .representation import VoxelGrid
 
 class DSECfull(data.Dataset):
-    def __init__(self, phase):
-        assert phase in ["train", "trainval", "test"]
+    def __init__(self):
 
         self.init_seed = False
-        self.phase = phase
         self.files = []
         self.flows = []
 
         ### Please change the root to satisfy your data saving setting.
         root = 'datasets/dsec_full'
-        if phase == 'train' or phase == 'trainval':
-            self.root = os.path.join(root, 'trainval')
-            self.augmentor = Augmentor(crop_size=[288, 384])
-        else:
-            self.root = os.path.join(root, 'test')
-
+        self.root = os.path.join(root, 'trainval')
+        self.augmentor = Augmentor(crop_size=[288, 384])
 
         self.files = glob.glob(os.path.join(self.root, '*', '*.npz'))
         self.files.sort()
@@ -51,19 +45,8 @@ class DSECfull(data.Dataset):
           
 
         #flow
-        if self.phase == "train" or self.phase == "trainval":
-            flow_16bit = np.load(self.flows[index])
-            flow_map, valid2D = flow_16bit_to_float(flow_16bit)
-        
-       
-
-        if self.phase == "test":
-            # Include submission coordinates (seuence name, file index)
-            file_path = Path(self.files[index])
-            sequence_name = file_path.parent.name
-            file_index = int(file_path.stem)
-            submission_coords = (sequence_name, file_index)
-            return events1, events2, submission_coords
+        flow_16bit = np.load(self.flows[index])
+        flow_map, valid2D = flow_16bit_to_float(flow_16bit)
         
         return events1, events2, flow_map, valid2D
 
@@ -72,21 +55,19 @@ class DSECfull(data.Dataset):
     
 
 
-class DataPrefetcher():
-    def __init__(self, dataloader, phase):
+class DataPrefetcherFull():
+    def __init__(self, dataloader, augment = False):
         """
-        The DataPrefetcher class takes a dataloader that provides raw data (raw events and optical flow),
+        The DataPrefetcherFull class takes a dataloader that provides raw data (raw events and optical flow),
         then It transforms the events into volumetric voxel grids on the GPU for faster performance, and applies
         data augmentation.
         """
-        assert phase in ["train", "trainval", "test"]
         self.dataloader = dataloader
-        self.phase = phase
+        self.augment = augment
         self.representation = VoxelGrid((15, 480, 640), normalize=True)
         self._len = len(dataloader)
 
         self.augmentor = Augmentor(crop_size=[288, 384])
-
 
 
     def prefetch(self):
@@ -128,15 +109,11 @@ class DataPrefetcher():
             voxel2 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).cpu().numpy()
 
             # Apply data augmentation
-            if self.phase == "train" or self.phase == "trainval":
-            
-                augmented = self.augmentor(voxel1, voxel2, flow, valid)
+            if self.augment:
+                voxel1, voxel2, flow, valid = self.augmentor(voxel1, voxel2, flow, valid)
 
-                voxel1, voxel2, flow, valid = augmented
-
-                flow = torch.from_numpy(flow).permute(2, 0, 1).float()
-                valid = torch.from_numpy(valid).float()
-
+            flow = torch.from_numpy(flow).permute(2, 0, 1).float()
+            valid = torch.from_numpy(valid).float()
             voxel1 = torch.from_numpy(voxel1).permute(2, 0, 1).float()
             voxel2 = torch.from_numpy(voxel2).permute(2, 0, 1).float()
 
@@ -205,7 +182,7 @@ def flow_16bit_to_float(flow_16bit: np.ndarray):
     return flow_map, valid2D
 
 
-def make_data_loader(phase, batch_size, num_workers):
+def make_data_loader(phase, batch_size, num_workers, data_augmentation = False):
     dset = DSECfull(phase)
     loader = data.DataLoader(
         dset,
@@ -214,8 +191,8 @@ def make_data_loader(phase, batch_size, num_workers):
         shuffle=True,
         drop_last=True,
         collate_fn=lambda batch : batch)
-    # The collate_fn returns the batch as is, given that it will be treated later by the DataPrefetcher
-    prefetcher = DataPrefetcher(loader, phase)
+    # The collate_fn returns the batch as is, given that it will be treated later by the DataPrefetcherFull
+    prefetcher = DataPrefetcherFull(loader, augment = data_augmentation)
     return loader, prefetcher
 
 if __name__ == '__main__':
