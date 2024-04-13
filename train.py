@@ -180,14 +180,22 @@ class Trainer:
         if os.path.isfile(ckpt_path):
             # Load the model
             checkpoint = torch.load(ckpt_path)
-            self.model.load_state_dict(checkpoint["model"], strict=False)
+            if "model" in checkpoint.keys():
+                self.model.load_state_dict(checkpoint["model"], strict=False)
+            else:
+                self.model.load_state_dict(checkpoint, strict=False)
 
             # Load training params
             if continuous:
-                self.optimizer.load_state_dict(checkpoint["optimizer"])
-                self.scheduler.load_state_dict(checkpoint["scheduler"])
-                self.tracker.load_state_dict(checkpoint["loss_tracker"])
-
+                try:
+                    self.optimizer.load_state_dict(checkpoint["optimizer"])
+                    self.scheduler.load_state_dict(checkpoint["scheduler"])
+                    self.tracker.load_state_dict(checkpoint["loss_tracker"])
+                except KeyError:
+                    print("It seems like one or more parameters are missing in the checkpoint. Cannot continue learning.")
+                    self.continue_training = False
+                    return
+                
                 return checkpoint["step"]
         else:
             print("Warning : No checkpoint was found at '{}'".format(ckpt_path))
