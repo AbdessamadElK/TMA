@@ -8,7 +8,7 @@ from pathlib import Path
 import imageio
 from tqdm import tqdm
 
-from dataloader.dsec_full import DSECfull
+from dataloader.dsec_test import DSECtest
 from model.TMA import TMA
 
 import flow_vis
@@ -50,7 +50,7 @@ def visualize_flow_image(save_dir:Path, flow: np.ndarray, file_index: int, metho
 @torch.no_grad()
 def generate_submission(model, save_path:str, visualize_flow = False, visualization_method = "new"):
     model.eval()
-    test_dataset = DSECfull('test')
+    test_dataset = DSECtest()
 
     bar = tqdm(test_dataset,total=len(test_dataset), ncols=60)
     bar.set_description('Test')
