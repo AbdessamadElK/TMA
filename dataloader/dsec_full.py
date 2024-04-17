@@ -11,7 +11,7 @@ from .augment import Augmentor
 from .representation import VoxelGrid
 
 class DSECfull(data.Dataset):
-    def __init__(self):
+    def __init__(self, phase):
 
         self.init_seed = False
         self.files = []
@@ -181,6 +181,11 @@ def flow_16bit_to_float(flow_16bit: np.ndarray):
     flow_map[valid_map[0], valid_map[1], 1] = (flow_16bit[valid_map[0], valid_map[1], 1] - 2 ** 15) / 128
     return flow_map, valid2D
 
+def collate_fn(batch):
+    """A clone collate function that is passed to the dataloader.
+    Like this, the dataloader returns the batch as is, given that
+    it will be processed later by the DataPrefetcher"""
+    return batch
 
 def make_data_loader(phase, batch_size, num_workers, data_augmentation = False):
     dset = DSECfull(phase)
@@ -190,8 +195,7 @@ def make_data_loader(phase, batch_size, num_workers, data_augmentation = False):
         num_workers=num_workers,
         shuffle=True,
         drop_last=True,
-        collate_fn=lambda batch : batch)
-    # The collate_fn returns the batch as is, given that it will be treated later by the DataPrefetcherFull
+        collate_fn=collate_fn)
     prefetcher = DataPrefetcherFull(loader, augment = data_augmentation)
     return loader, prefetcher
 

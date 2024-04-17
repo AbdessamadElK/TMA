@@ -57,8 +57,8 @@ def generate_submission(model, save_path:str, visualize_flow = False, visualizat
 
     save_path = Path(save_path)
     if visualize_flow:
-        save_path = save_path / "submission"
         vis_path = save_path / "visualization"
+        save_path = save_path / "submission"
 
     for voxel1, voxel2, submission_coords in bar:
         voxel1 = voxel1[None].cuda()
