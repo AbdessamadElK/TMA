@@ -212,7 +212,6 @@ def make_data_loader(phase, batch_size, num_workers, data_augmentation = False):
         shuffle=True,
         drop_last=True,
         collate_fn=collate_fn)
-    # The collate_fn returns the batch as is, and it will be dealt with later by the prefetcher  
     prefetcher = DataPrefetcherSplit(loader, phase, augment=data_augmentation)
     return loader, prefetcher
 
