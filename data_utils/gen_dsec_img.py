@@ -6,8 +6,8 @@ from tqdm import tqdm
 import shutil
 
 if __name__ == '__main__':
-    images_path = Path('D:/DSEC_flow/train')
-    flow_path = Path('D:/DSEC_flow/train')
+    images_path = Path('D:/DSEC_flow/validation')
+    flow_path = Path('D:/DSEC_flow/validation')
     output_path = Path('C:/users/abdessamad/TMA/datasets/dsec_full/trainval')
     sequences = [seq.name for seq in images_path.iterdir()]
 
@@ -25,7 +25,7 @@ if __name__ == '__main__':
         timestamps_flow = np.genfromtxt(ts_file_flow, delimiter=',')
         timestamps_flow  = np.unique(timestamps_flow.flatten())
 
-        output_dir = output_path / seq
+        output_dir = output_path / seq / 'images'
         if not os.path.exists(str(output_dir)):
             os.makedirs(output_dir)
 
@@ -35,5 +35,5 @@ if __name__ == '__main__':
             image_index = np.where(timestamps_img == t_curr)
 
             # Copy image to the corresponding output directory
-            save_path = output_dir / 'images' / '{:06d}.png'.format(i)
+            save_path = output_dir / '{:06d}.png'.format(i)
             shutil.copy(img_list[i], save_path)
