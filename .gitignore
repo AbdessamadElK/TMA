@@ -137,3 +137,7 @@ wandb
 # checkpoints
 # checkpoints_sfda
 *.pth
+
+/datasets
+mytest.py
+save_voxels.py
