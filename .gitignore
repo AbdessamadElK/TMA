@@ -141,3 +141,4 @@ wandb
 /datasets
 mytest.py
 save_voxels.py
+/ckpts
