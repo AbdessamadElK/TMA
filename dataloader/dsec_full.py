@@ -61,7 +61,6 @@ class DSECfull(data.Dataset):
         
         #events
         events_file = np.load(self.files[index])
-        print(events_file['events_prev'].shape)
         voxel1 = events_file['events_prev'].transpose(1, 2, 0)
         voxel2 = events_file['events_curr'].transpose(1, 2, 0)
 
