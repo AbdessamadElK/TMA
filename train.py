@@ -72,10 +72,6 @@ class Trainer:
         if not os.path.isdir(self.save_path):
             os.makedirs(self.save_path)
 
-        #Transforms
-        self.crop = args.crop
-        self.hflip = args.hflip
-
 
         #Loader
         self.train_loader = make_data_loader('trainval', args.batch_size, args.num_workers)
@@ -197,19 +193,19 @@ class Trainer:
         else:
             print("Warning : No checkpoint was found at '{}'".format(ckpt_path))
 
-    def apply_transforms(self, data_items):
-        transformed_items = data_items
-        if self.crop:
-            crop_size = (CROP_HEIGTH, CROP_WIDTH)
-            rand_crop = v2.RandomCrop(crop_size)
-            i, j, h, w = rand_crop.get_params(data_items[0], output_size = crop_size)
+    # def apply_transforms(self, data_items):
+    #     transformed_items = data_items
+    #     if self.crop:
+    #         crop_size = (CROP_HEIGTH, CROP_WIDTH)
+    #         rand_crop = v2.RandomCrop(crop_size)
+    #         i, j, h, w = rand_crop.get_params(data_items[0], output_size = crop_size)
 
-            transformed_items = [v2.functional.crop(item, i, j, h, w) for item in transformed_items]
+    #         transformed_items = [v2.functional.crop(item, i, j, h, w) for item in transformed_items]
 
-        if self.hflip and torch.rand() > 0.5:
-            transformed_items = [v2.functional.hflip(item) for item in transformed_items]
+    #     if self.hflip and torch.rand() > 0.5:
+    #         transformed_items = [v2.functional.hflip(item) for item in transformed_items]
 
-        return transformed_items
+    #     return transformed_items
       
 
 def set_seed(seed):
@@ -274,11 +270,7 @@ if __name__=='__main__':
     #Loading pretrained models
     parser.add_argument('--model_path', type=str, default="", help="Path to existing model to be loaded")
     parser.add_argument('--continue_training', action='store_true', default=False, help="Continue learning with previous params")
-    
-    #Data augmentation
-    parser.add_argument('--crop', action="store_true", default=False, help = "Activate random cropping to (288,384)")
-    parser.add_argument('--hflip', action="store_true", default=False, help="Activate horizontal flipping")
-    
+        
     args = parser.parse_args()
     set_seed(1)
     if args.wandb:

@@ -6,8 +6,8 @@ import os
 from glob import glob
 from tqdm import tqdm
 import imageio
-import torch
 
+import torch
 from dataloader.representation import VoxelGrid
 
 TEMPORAL_BINS = 15
@@ -37,7 +37,7 @@ def rectify_and_write(rect_map, events_curr, events_prev, output_dir, idx):
 
     #write events
     output_name = os.path.join(output_dir, '{:06d}'.format(idx))
-    if os.path.exists(output_name):
+    if os.path.exists(output_name) and not OVERWRITE:
         return
     np.savez(output_name, events_prev=events0, events_curr=events1)
 
@@ -55,27 +55,28 @@ def events_to_voxel_grid(x, y, p, t):
         }
     return representation.convert(event_data_torch)
 
-if __name__ == '__main__':
-    event_path = 'E:/DSEC/train_events' 
-    flow_path = 'E:/DSEC/train_optical_flow'
 
-    sequences = os.listdir(flow_path)
+if __name__ == '__main__':
+    event_path = 'E:/DSEC/test_events'
+    ts_path = 'E:/DSEC/test_forward_optical_flow_timestamps'
+
+    csvfiles = os.listdir(ts_path)
+    sequences = [csv.split('.')[0] for csv in csvfiles]
     for seq in sequences:
         event_h5 = os.path.join(event_path, seq, 'events/left', 'events.h5')
         rectify_h5 = os.path.join(event_path, seq, 'events/left', 'rectify_map.h5')
-
-        ts_file = os.path.join(flow_path, seq, 'flow', 'forward_timestamps.txt')
-        flow_dir = os.path.join(flow_path, seq, 'flow', 'forward') 
-        flow_list = sorted(glob(os.path.join(flow_dir, '*.png')))
-        timestamps = np.genfromtxt(ts_file, delimiter=',')
-        assert timestamps.shape[0]== len(flow_list)
         
+        ts_file = os.path.join(ts_path, seq+'.csv')
+        ts = np.genfromtxt(ts_file, delimiter=',')
+        timestamps, indexs = ts[:,:2], ts[:,2]
+        assert len(timestamps) == len(indexs)
         h5f = h5py.File(event_h5, 'r')
         slicer = EventSlicer(h5f)
         with h5py.File(rectify_h5, 'r') as h5_rect:
             rectify_map = h5_rect['rectify_map'][()]
 
-        output_dir = os.path.join('datasets/dsec_full/trainval', seq)
+
+        output_dir = os.path.join('datasets/dsec_full/test', seq)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
@@ -95,14 +96,6 @@ if __name__ == '__main__':
             if events_prev == None:
                 print(f'None data can be converted to voxel in {seq} at {i}th timestamps for previous condition!')
                 continue
-            rectify_and_write(rectify_map, events_curr, events_prev, output_dir, i)
-
-            # save optical flow
-            flow_file_path = os.path.join(output_dir, 'flow_{:06d}.npy'.format(i))
-            if os.path.isfile(flow_file_path):
-                continue
-
-            flow_16bit = imageio.imread(flow_list[i], format='PNG-FI')
-            np.save(os.path.join(output_dir, 'flow_{:06d}.npy'.format(i)), flow_16bit)
+            rectify_and_write(rectify_map, events_curr, events_prev, output_dir, int(indexs[i]))
 
         h5f.close()

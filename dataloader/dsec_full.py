@@ -61,19 +61,9 @@ class DSECfull(data.Dataset):
         
         #events
         events_file = np.load(self.files[index])
-        events1 = events_file['events_prev']
-        x = events1[:, 0]
-        y = events1[:, 1]
-        t = events1[:, 2]
-        p = events1[:, 3]
-        voxel1 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).numpy()
-
-        events2 = events_file['events_curr']
-        x = events2[:, 0]
-        y = events2[:, 1]
-        t = events2[:, 2]
-        p = events2[:, 3]
-        voxel2 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).numpy()        
+        print(events_file['events_prev'].shape)
+        voxel1 = events_file['events_prev'].transpose(1, 2, 0)
+        voxel2 = events_file['events_curr'].transpose(1, 2, 0)
 
         #flow
         if self.phase == "train" or self.phase == "trainval":
@@ -96,8 +86,6 @@ class DSECfull(data.Dataset):
             return voxel1, voxel2, submission_coords
         
         return voxel1, voxel2, flow_map, valid2D
-
-
 
     
     def __len__(self):
