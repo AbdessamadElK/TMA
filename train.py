@@ -21,6 +21,7 @@ from flow_vis import flow_to_color
 MAX_FLOW = 400
 SUM_FREQ = 100
 VIS_FREQ = 5000
+SAVE_FREQ = 10000
 
 CROP_HEIGTH = 288
 CROP_WIDTH = 384
@@ -176,20 +177,27 @@ class Trainer:
 
         return model_ckpt_path
     
-    def load_ckpt(self, ckpt_path:str, params_ckpt_path):
+    def load_ckpt(self, ckpt_path:str, continuous = False):
         if os.path.isfile(ckpt_path):
             # Load the model
             checkpoint = torch.load(ckpt_path)
-            self.model.load_state_dict(checkpoint, strict=False)
+            if "model" in checkpoint.keys():
+                self.model.load_state_dict(checkpoint["model"], strict=False)
+            else:
+                self.model.load_state_dict(checkpoint, strict=False)
 
             # Load training params
-            if params_ckpt_path is not None:
-                params_checkpoint = torch.load(params_ckpt_path)
-                self.optimizer.load_state_dict(params_checkpoint["optimizer"])
-                self.scheduler.load_state_dict(params_checkpoint["scheduler"])
-                self.tracker.load_state_dict(params_checkpoint["loss_tracker"])
-
-                return params_checkpoint["step"]
+            if continuous:
+                try:
+                    self.optimizer.load_state_dict(checkpoint["optimizer"])
+                    self.scheduler.load_state_dict(checkpoint["scheduler"])
+                    self.tracker.load_state_dict(checkpoint["loss_tracker"])
+                except KeyError:
+                    print("It seems like one or more parameters are missing in the checkpoint. Cannot continue learning.")
+                    self.continue_training = False
+                    return
+                
+                return checkpoint["step"]
         else:
             print("Warning : No checkpoint was found at '{}'".format(ckpt_path))
 
