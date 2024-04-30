@@ -155,24 +155,28 @@ class Trainer:
                         flow_sample = flow_preds[-1][0]
                         visualization = flow_to_color(flow_sample.cpu().numpy().transpose(1, 2, 0), convert_to_bgr = False)
                         wandb.log({'Optical Flow': wandb.Image(visualization, caption=f"Visualization {vis_steps}")})
-                if total_steps and total_steps % 10000 == 0:
-                    ckpt = os.path.join(self.save_path, f'checkpoint_{total_steps}.pth')
-                    torch.save(self.model.state_dict(), ckpt)
+
+                if total_steps and total_steps % SAVE_FREQ == 0:
+                    # Checkpoint savepath
+                    ckpt = os.path.join(self.save_path, f'checkpoint_{total_steps}')
+
+                    # Save checkpoint with parameters for continuous training
+                    params_state = {"step":total_steps,
+                            "model":self.model.state_dict(),
+                            "optimizer":self.optimizer.state_dict(),
+                            "scheduler":self.scheduler.state_dict(),
+                            "loss_tracker":self.tracker.state_dict()}
+
+                    torch.save(params_state, ckpt)
+
                 if total_steps > self.args.num_steps:
                     keep_training = False
                     break
             
             time.sleep(0.03)
         
-        # Save checkpoint
-        params_state = {"step":total_steps,
-                 "optimizer":self.optimizer.state_dict(),
-                 "scheduler":self.scheduler.state_dict(),
-                 "loss_tracker":self.tracker.state_dict()}
-        
-        params_ckpt_path = os.path.join(self.save_path, 'params_checkpoint')
+        # Save final Checkpoint
         model_ckpt_path = os.path.join(self.save_path, "checkpoint.pth")
-        torch.save(params_state, params_ckpt_path)
         torch.save(self.model.state_dict(), model_ckpt_path)
 
         return model_ckpt_path
