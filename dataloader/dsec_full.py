@@ -78,12 +78,13 @@ class DSECfull(data.Dataset):
 
         #flow
         if self.phase == "train" or self.phase == "trainval":
-            flow_16bit = np.load(self.flows[index])
             #image
             img = imageio.imread(self.images[index])
 
             #segmentation
             seg = imageio.imread(self.segmentations[index])
+            
+            flow_16bit = np.load(self.flows[index])
             flow_map, valid2D = flow_16bit_to_float(flow_16bit)
             voxel1, voxel2, flow_map, valid2D, img, seg = self.augmentor(voxel1, voxel2, flow_map, valid2D, img, seg)
 
