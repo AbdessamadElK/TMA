@@ -8,6 +8,7 @@ from .aggregate import MotionFeatureEncoder, MPA
 from .update import UpdateBlock
 from .util import coords_grid
 
+from .segmentation import DeepLabV3PlusDecoder
 
 class TMA(nn.Module):
     def __init__(self, input_bins=15):
@@ -26,21 +27,25 @@ class TMA(nn.Module):
 
         self.update = UpdateBlock(hidden_dim=128, split=self.split)
 
+        self.deeplab = DeepLabV3PlusDecoder(128 * (self.split+1), 128, num_classes = 19, upsample_scale = 8)
+
     def upsample_flow(self, flow, mask, scale=8):
         """ Upsample flow field [H/8, W/8, 2] -> [H, W, 2] using convex combination """
-        N, _, H, W = flow.shape
+        N, C, H, W = flow.shape
         mask = mask.view(N, 1, 9, scale, scale, H, W)
         mask = torch.softmax(mask, dim=2)
 
         up_flow = F.unfold(scale * flow, [3,3], padding=1)
-        up_flow = up_flow.view(N, 2, 9, 1, 1, H, W)
+        up_flow = up_flow.view(N, C, 9, 1, 1, H, W)
 
         up_flow = torch.sum(mask * up_flow, dim=2)
         up_flow = up_flow.permute(0, 1, 4, 2, 5, 3)
-        return up_flow.reshape(N, 2, scale*H, scale*W)
+        return up_flow.reshape(N, C, scale*H, scale*W)
 
 
     def forward(self, x1, x2, iters=6):
+        visualization_output = {}
+
         b,_,h,w = x2.shape
 
         #Feature maps [f_0 :: f_i :: f_g]
@@ -48,6 +53,11 @@ class TMA(nn.Module):
         voxelref = x1.chunk(self.split, dim=1)[-1]
         voxels = (voxelref,) + voxels #[group+1] elements
         fmaps = self.fnet(voxels)#Tuple(f0, f1, ..., f_g)
+
+        # Low level features for semantic segmentation
+        fmaps_all = torch.cat(fmaps, dim=1)
+
+        visualization_output["fmap_all"] = fmaps_all[0]
 
         # Context map [net, inp]
         cmap = self.cnet(torch.cat(voxels, dim=1))
@@ -87,12 +97,19 @@ class TMA(nn.Module):
             net, dflow, upmask = self.update(net, inp, mf)
             coords1 = coords1 + dflow
             
+
             if self.training:
                 flow_up = self.upsample_flow(coords1 - coords0, upmask)
                 flow_predictions.append(flow_up)
 
+
+        visualization_output["gru_output"] = net[0]
+
+        # Run segmentation network
+        segmentation = self.deeplab(fmaps_all, net)
+
         if self.training:
-            return flow_predictions
+            return flow_predictions, segmentation, visualization_output
         else:
             return self.upsample_flow(coords1 - coords0, upmask)
 

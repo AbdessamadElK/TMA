@@ -10,6 +10,9 @@ import glob
 from .augment import Augmentor
 from .representation import VoxelGrid
 
+import imageio.v2 as imageio
+import cv2
+
 class DSECfull(data.Dataset):
     def __init__(self, phase):
         assert phase in ["train", "trainval", "test"]
@@ -34,6 +37,14 @@ class DSECfull(data.Dataset):
 
         self.flows = glob.glob(os.path.join(self.root, '*', 'flow_*.npy'))
         self.flows.sort()
+
+        if phase == 'train' or phase == 'trainval':
+            # Include images and semantic segmentation (temporally not implemented for test)
+            self.images = glob.glob(os.path.join(self.root, '*', 'images', '*.png'))
+            self.images.sort()
+
+            self.segmentations = glob.glob(os.path.join(self.root, '*', 'segmentation', '*.png'))
+            self.segmentations.sort()
 
     def events_to_voxel_grid(self, x, y, p, t):
         t = (t - t[0]).astype('float32')
@@ -64,11 +75,20 @@ class DSECfull(data.Dataset):
         voxel1 = events_file['events_prev'].transpose(1, 2, 0)
         voxel2 = events_file['events_curr'].transpose(1, 2, 0)
 
+
         #flow
         if self.phase == "train" or self.phase == "trainval":
             flow_16bit = np.load(self.flows[index])
+            #image
+            img = imageio.imread(self.images[index])
+
+            #segmentation
+            seg = imageio.imread(self.segmentations[index])
             flow_map, valid2D = flow_16bit_to_float(flow_16bit)
-            voxel1, voxel2, flow_map, valid2D = self.augmentor(voxel1, voxel2, flow_map, valid2D)
+            voxel1, voxel2, flow_map, valid2D, img, seg = self.augmentor(voxel1, voxel2, flow_map, valid2D, img, seg)
+
+            img = torch.from_numpy(img).permute(2, 0, 1).float()
+            seg = torch.from_numpy(seg).float()
 
             flow_map = torch.from_numpy(flow_map).permute(2, 0, 1).float()
             valid2D = torch.from_numpy(valid2D).float()
@@ -84,7 +104,7 @@ class DSECfull(data.Dataset):
             submission_coords = (sequence_name, file_index)
             return voxel1, voxel2, submission_coords
         
-        return voxel1, voxel2, flow_map, valid2D
+        return voxel1, voxel2, flow_map, valid2D, img, seg
 
     
     def __len__(self):

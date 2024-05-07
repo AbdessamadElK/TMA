@@ -50,7 +50,8 @@ class Augmentor:
         valid_img[yy, xx] = 1
 
         return flow_img, valid_img
-    def spatial_transform(self, voxel1, voxel2, flow, valid):
+    
+    def spatial_transform(self, voxel1, voxel2, flow, valid, img, seg):
         ht, wd = voxel2.shape[:2]
         min_scale = np.maximum(
             (self.crop_size[0] + 1) / float(ht), 
@@ -66,6 +67,9 @@ class Augmentor:
             voxel2 = cv2.resize(voxel2, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_LINEAR)
             flow, valid = self.resize_sparse_flow_map(flow, valid, fx=scale_x, fy=scale_y)
             # print('Resized:', voxel1.shape, voxel2.shape, flow.shape, valid.shape)
+
+            img = cv2.resize(img, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_LINEAR)
+            seg = cv2.resize(seg, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_LINEAR)
         
 
         margin_y = int(round(65 * scale_y))#downside
@@ -82,27 +86,40 @@ class Augmentor:
         flow = flow[y0:y0+self.crop_size[0], x0:x0+self.crop_size[1]]
         valid = valid[y0:y0+self.crop_size[0], x0:x0+self.crop_size[1]]
 
+        img = img[y0:y0+self.crop_size[0], x0:x0+self.crop_size[1]]
+        seg = seg[y0:y0+self.crop_size[0], x0:x0+self.crop_size[1]]
+
         if self.do_flip:
             if np.random.rand() < self.h_flip_prob: # h-flip
                 voxel1 = voxel1[:, ::-1]
                 voxel2 = voxel2[:, ::-1]
                 flow = flow[:, ::-1] * [-1.0, 1.0]
                 valid = valid[:, ::-1]
-        
+
+                img = img[:, ::-1]
+                seg = seg[:, ::-1]
+
+
             if np.random.rand() < self.v_flip_prob: # v-flip
                 voxel1 = voxel1[::-1, :]
                 voxel2 = voxel2[::-1, :]
                 flow = flow[::-1, :] * [1.0, -1.0]
                 valid = valid[::-1, :]
-        return voxel1, voxel2, flow, valid
+
+                img = img[::-1, :]
+                seg = seg[::-1, :]
+
+        return voxel1, voxel2, flow, valid, img, seg
     
-    def __call__(self, voxel1, voxel2, flow, valid):
-        voxel1, voxel2, flow, valid = self.spatial_transform(voxel1, voxel2, flow, valid)
+    def __call__(self, voxel1, voxel2, flow, valid, img, seg):
+        voxel1, voxel2, flow, valid, img, seg = self.spatial_transform(voxel1, voxel2, flow, valid, img, seg)
         voxel1 = np.ascontiguousarray(voxel1)
         voxel2 = np.ascontiguousarray(voxel2)
         flow = np.ascontiguousarray(flow)
         valid = np.ascontiguousarray(valid)  
+        img = np.ascontiguousarray(img)
+        seg = np.ascontiguousarray(seg)
         
-        return voxel1, voxel2, flow, valid      
+        return voxel1, voxel2, flow, valid, img, seg   
                 
                         

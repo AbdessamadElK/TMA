@@ -6,6 +6,7 @@ import random
 from tqdm import tqdm
 import wandb
 import torch
+from torch import nn
 import numpy as np
 from utils.file_utils import get_logger
 from dataloader.dsec_full import make_data_loader
@@ -18,9 +19,11 @@ from datetime import datetime
 from torchvision.transforms import v2
 from flow_vis import flow_to_color
 
+from utils.visualization import writer_add_features, segmentation2rgb_19
+
 MAX_FLOW = 400
 SUM_FREQ = 100
-VIS_FREQ = 5000
+VIS_FREQ = 2000
 SAVE_FREQ = 10000
 
 CROP_HEIGTH = 288
@@ -46,6 +49,7 @@ class Loss_Tracker:
         if self.total_steps % SUM_FREQ == 0:
             if self.wandb:
                 wandb.log({'EPE': self.running_loss['epe']/SUM_FREQ}, step=self.total_steps)
+                wandb.log({'Segmentation Crossentropy':self.running_loss['seg_loss']/SUM_FREQ}, step=self.total_steps)
             self.running_loss = {}
         
     def state_dict(self):
@@ -113,7 +117,6 @@ class Trainer:
                 params_ckpt_path = os.path.join(os.path.dirname(self.old_ckpt_path), "params_checkpoint")
                 params_ckpt_path = params_ckpt_path if self.continue_training else None
                 self.previous_step = self.load_ckpt(self.old_ckpt_path, params_ckpt_path)
-                self.scheduler.total_steps = self.args.num_steps - self.previous_step + 1
                 self.writer.info(f"Loaded the checkpoint at '{self.old_ckpt_path}'.")
                 if self.continue_training:
                     self.writer.info("Loaded parameters for continuous learning.")
@@ -127,18 +130,22 @@ class Trainer:
         self.writer.info(self.args)
         self.model.train()
         
+        total_steps = 0
         vis_steps = 0
-        total_steps = 0 if not self.continue_training else self.previous_step
+        if self.continue_training:
+            total_steps = self.previous_step
+            vis_steps = int(total_steps / VIS_FREQ)
 
         keep_training = True
         while keep_training:
 
             bar = tqdm(enumerate(self.train_loader),total=len(self.train_loader), ncols=60)
-            for index, (voxel1, voxel2, flow_map, valid2D) in bar:
+            for index, (voxel1, voxel2, flow_map, valid2D, img, seg_gt) in bar:
                 # voxel1, voxel2, flow_map, valid2D = self.apply_transforms(data_items)
                 self.optimizer.zero_grad()
-                flow_preds = self.model(voxel1.cuda(), voxel2.cuda())
-                flow_loss, loss_metrics = sequence_loss(flow_preds, flow_map.cuda(), valid2D.cuda(), self.args.weight, MAX_FLOW)
+                flow_preds, seg_out, vis_output = self.model(voxel1.cuda(), voxel2.cuda())
+
+                flow_loss, loss_metrics = sequence_loss(flow_preds, flow_map.cuda(), valid2D.cuda(), seg_out, seg_gt.cuda(), self.args.weight, MAX_FLOW)
                 
                 flow_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.args.grad_clip)
@@ -155,6 +162,15 @@ class Trainer:
                         flow_sample = flow_preds[-1][0]
                         visualization = flow_to_color(flow_sample.cpu().numpy().transpose(1, 2, 0), convert_to_bgr = False)
                         wandb.log({'Optical Flow': wandb.Image(visualization, caption=f"Visualization {vis_steps}")})
+
+                        #segmentation
+                        seg_pred = seg_out.detach().max(dim=1)[1].cpu().numpy()
+                        wandb.log({'Segmentation':wandb.Image(segmentation2rgb_19(seg_pred[0]), caption=f"Visualization {vis_steps}")})
+
+                        #Features
+                        for key, value in vis_output.items():
+                            value = writer_add_features(value)
+                            wandb.log({key:wandb.Image(value)})
 
                 if total_steps and total_steps % SAVE_FREQ == 0:
                     # Checkpoint savepath
@@ -227,9 +243,9 @@ def set_seed(seed):
     random.seed(seed)
 
 
-def sequence_loss(flow_preds, flow_gt, valid, gamma=0.8, max_flow=MAX_FLOW):
+def sequence_loss(flow_preds, flow_gt, valid, seg_out, seg_gt, gamma=0.8, max_flow=MAX_FLOW):
     """ Loss function defined over sequence of flow predictions """
-    n_predictions = len(flow_preds)    
+    n_predictions = len(flow_preds)  
     flow_loss = 0.0
 
     # exlude invalid pixels and extremely large diplacements
@@ -244,14 +260,27 @@ def sequence_loss(flow_preds, flow_gt, valid, gamma=0.8, max_flow=MAX_FLOW):
     epe = torch.sum((flow_preds[-1] - flow_gt)**2, dim=1).sqrt()
     epe = epe.view(-1)[valid.view(-1)]
 
+    """ Segmentation Loss """
+    seg_loss_fn = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
+    seg_gt[valid==0] = 255
+    seg_loss = seg_loss_fn(seg_out, seg_gt.long())
+
+    total_loss = flow_loss + 0.5 * seg_loss
+
     metrics = {
         'epe': epe.mean().item(),
         '1px': (epe < 1).float().mean().item(),
         '3px': (epe < 3).float().mean().item(),
         '5px': (epe < 5).float().mean().item(),
+        'seg_loss':seg_loss
     }
 
-    return flow_loss, metrics
+    return total_loss, metrics
+
+
+def segmentation_loss(seg_pred, seg_gt):
+    # Pixel wise cross-entropy loss
+    pass
 
 
         

@@ -15,7 +15,7 @@ import flow_vis
 from utils.visualization import visualize_optical_flow
 
 
-def visualize_flow_submission(save_dir: Path, flow: np.ndarray, file_index: int):
+def save_flow_submission(save_dir: Path, flow: np.ndarray, file_index: int):
     # flow_u(u,v) = ((float)I(u,v,1)-2^15)/128.0;
     # flow_v(u,v) = ((float)I(u,v,2)-2^15)/128.0;
     # valid(u,v)  = (bool)I(u,v,3);
@@ -68,7 +68,7 @@ def generate_submission(model, save_path:str, visualize_flow = False, visualizat
         sequence, file_index = submission_coords
         save_dir = save_path / sequence
 
-        visualize_flow_submission(save_dir, flow_pred.numpy(), file_index)
+        save_flow_submission(save_dir, flow_pred.numpy(), file_index)
 
         if visualize_flow:
             visualize_flow_image(vis_path / sequence, flow_pred.numpy(), file_index, visualization_method)

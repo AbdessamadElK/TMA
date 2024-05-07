@@ -44,6 +44,7 @@ class FlowHead(nn.Module):
     def forward(self, x):
         flow = self.conv2(self.relu(self.conv1(x)))
         return flow
+    
 
 
 class UpdateBlock(nn.Module):
@@ -62,5 +63,7 @@ class UpdateBlock(nn.Module):
         net = self.gru(net, inp)
         df = self.pred(net)
         mask = .25 * self.mask(net)
+
+
     
         return net, df, mask
