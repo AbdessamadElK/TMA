@@ -6,6 +6,7 @@ import random
 from tqdm import tqdm
 import wandb
 import torch
+from torch import nn
 import numpy as np
 
 
@@ -14,10 +15,14 @@ from utils.file_utils import get_logger
 from evaluate import validate_DSEC
 from model.TMA import TMA
 
+from utils.visualization import get_vis_matrix, writer_add_features
 
 MAX_FLOW = 400
-VAL_FREQ = 5000
+
 SUM_FREQ = 100
+VAL_FREQ = 5000
+VIS_FREQ = 2000
+SAVE_FREQ = 10000
 
 
 class Loss_Tracker:
@@ -38,7 +43,19 @@ class Loss_Tracker:
         if self.total_steps % SUM_FREQ == 0:
             if self.wandb:
                 wandb.log({'Train-EPE': self.running_loss['epe']/SUM_FREQ}, step=self.total_steps)
+                wandb.log({'Segmentation Crossentropy':self.running_loss['seg_loss']/SUM_FREQ}, step=self.total_steps)
             self.running_loss = {}
+
+    def state_dict(self):
+        return {"running_loss":self.running_loss,
+                "total_steps":self.total_steps,
+                "wandb":self.wandb}
+    
+    def load_state_dict(self, state_dict:dict):
+        keys = ["running_loss", "total_steps", "wandb"]
+        for key in keys:
+            self.__setattr__(key, state_dict[key])
+
 
 class Trainer:
     def __init__(self, args):
@@ -64,7 +81,9 @@ class Trainer:
             pct_start=0.01,
             cycle_momentum=False,
             anneal_strategy='linear')
-
+        
+         # Segmentation Loss function
+        self.seg_loss_fn = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
 
         #Logger
         self.checkpoint_dir = args.checkpoint_dir
@@ -75,6 +94,26 @@ class Trainer:
         
         self.best_epe = 100
         self.best_step = None
+
+         #Loading checkpoint
+        self.continue_training = args.continue_training
+        self.old_ckpt_path = args.model_path
+        self.previous_step = None
+
+        if self.old_ckpt_path == "":
+            if self.continue_training:
+                print("Cannot continue training without a pretrained model checkpoint. Please provide '--model_path'")
+                self.continue_training = False
+        else:
+            if os.path.isfile(self.old_ckpt_path):
+                params_ckpt_path = os.path.join(os.path.dirname(self.old_ckpt_path), "params_checkpoint")
+                params_ckpt_path = params_ckpt_path if self.continue_training else None
+                self.previous_step = self.load_ckpt(self.old_ckpt_path, params_ckpt_path)
+                self.writer.info(f"Loaded the checkpoint at '{self.old_ckpt_path}'.")
+                if self.continue_training:
+                    self.writer.info("Loaded parameters for continuous learning.")
+            else:
+                print("Couldn't find a checkpoint file at '{}'".format(self.old_ckpt_path))
         
         self.writer.info('====A NEW TRAINING PROCESS====')
 
@@ -84,16 +123,19 @@ class Trainer:
 
         total_steps = 0
         val_steps = 0
+        vis_steps = 0
+
         keep_training = True
         while keep_training:
 
             bar = tqdm(enumerate(self.train_loader),total=len(self.train_loader), ncols=60)
-            for index, (voxel1, voxel2, flow_map, valid2D) in bar:
+            for index, (voxel1, voxel2, flow_map, valid2D, img, seg_gt) in bar:
 
                 self.optimizer.zero_grad()
-                flow_preds = self.model(voxel1.cuda(), voxel2.cuda())
-                flow_loss, loss_metrics = sequence_loss(flow_preds, flow_map.cuda(), valid2D.cuda(), self.args.weight, MAX_FLOW)
-
+                flow_preds, seg_out, vis_output = self.model(voxel1.cuda(), voxel2.cuda())
+                flow_loss, loss_metrics = sequence_loss(flow_preds, flow_map.cuda(), valid2D.cuda(),
+                                                        seg_out, seg_gt.cuda(), self.seg_loss_fn,
+                                                        self.args.weight, MAX_FLOW)
 
                 flow_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.args.grad_clip)
@@ -109,7 +151,8 @@ class Trainer:
                     results.update(validate_DSEC(self.model))
                     if self.args.wandb:
                         wandb.log({'VAL-EPE': results['dsec-epe']}, step=total_steps)
-                        wandb.log({'VAL-VIS': wandb.Image(results['visualization'], caption=f"Prediction {val_steps}")})
+                        wandb.log({'VAL - Segmentation Crossentropy':results['seg_loss']})
+                        wandb.log({'VAL - Predictions (top) vs Ground Truths (bottom)': wandb.Image(results['visualization'], caption=f"Visualization {val_steps}")})
                     if  results['dsec-epe'] < self.best_epe:
                         ckpt_path = os.path.join(self.args.checkpoint_dir, 'best.pth')
                         torch.save(self.model.state_dict(), ckpt_path)
@@ -119,6 +162,42 @@ class Trainer:
                     self.model.train()
                     val_steps +=1
 
+                if total_steps and total_steps % VIS_FREQ == 0 and self.args.wandb:
+                    vis_steps += 1
+                    with torch.no_grad():
+                        #flow_preds: (12, 6, 2, h, w)
+                        flow_sample = flow_preds[-1].cpu().numpy()
+                        flow_map = flow_map.numpy()
+                        valid2D = valid2D.numpy()
+                        
+                        #segmentation
+                        seg_pred = seg_out.detach().max(dim=1)[1].cpu().numpy()
+                        seg_gt = seg_gt.numpy()
+
+                        #image
+                        img = img.numpy()
+
+                        #visualization
+                        vis = get_vis_matrix(flow_sample[0], flow_map[0], valid2D[0], seg_pred[0], seg_gt[0], img[0])
+                        wandb.log({'TRAIN - Predictions (top) vs Ground Truths (bottom)':wandb.Image(vis, caption=f"Visualization {vis_steps}")})
+
+                        #Features
+                        for key, value in vis_output.items():
+                            value = writer_add_features(value)
+                            wandb.log({key:wandb.Image(value)})
+
+                if total_steps and total_steps % SAVE_FREQ == 0:
+                    # Checkpoint savepath
+                    ckpt = os.path.join(self.save_path, f'checkpoint_{total_steps}')
+
+                    # Save checkpoint with parameters for continuous training
+                    params_state = {"step":total_steps,
+                            "model":self.model.state_dict(),
+                            "optimizer":self.optimizer.state_dict(),
+                            "scheduler":self.scheduler.state_dict(),
+                            "loss_tracker":self.tracker.state_dict()}
+
+                    torch.save(params_state, ckpt)
 
                 if total_steps >= self.args.num_steps:
                     keep_training = False
@@ -130,6 +209,30 @@ class Trainer:
         return ckpt_path 
 
 
+    def load_ckpt(self, ckpt_path:str, continuous = False):
+        if os.path.isfile(ckpt_path):
+            # Load the model
+            checkpoint = torch.load(ckpt_path)
+            if "model" in checkpoint.keys():
+                self.model.load_state_dict(checkpoint["model"], strict=False)
+            else:
+                self.model.load_state_dict(checkpoint, strict=False)
+
+            # Load training params
+            if continuous:
+                try:
+                    self.optimizer.load_state_dict(checkpoint["optimizer"])
+                    self.scheduler.load_state_dict(checkpoint["scheduler"])
+                    self.tracker.load_state_dict(checkpoint["loss_tracker"])
+                except KeyError:
+                    print("It seems like one or more parameters are missing in the checkpoint. Cannot continue learning.")
+                    self.continue_training = False
+                    return
+                
+                return checkpoint["step"]
+        else:
+            print("Warning : No checkpoint was found at '{}'".format(ckpt_path))
+
 
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -137,9 +240,9 @@ def set_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
 
-def sequence_loss(flow_preds, flow_gt, valid, gamma=0.8, max_flow=MAX_FLOW):
+def sequence_loss(flow_preds, flow_gt, valid, seg_out, seg_gt, seg_loss_fn, gamma=0.8, max_flow=MAX_FLOW):
     """ Loss function defined over sequence of flow predictions """
-    n_predictions = len(flow_preds)    
+    n_predictions = len(flow_preds)  
     flow_loss = 0.0
 
     # exlude invalid pixels and extremely large diplacements
@@ -154,14 +257,21 @@ def sequence_loss(flow_preds, flow_gt, valid, gamma=0.8, max_flow=MAX_FLOW):
     epe = torch.sum((flow_preds[-1] - flow_gt)**2, dim=1).sqrt()
     epe = epe.view(-1)[valid.view(-1)]
 
+    """ Segmentation Loss """
+    seg_gt[valid==0] = 255
+    seg_loss = seg_loss_fn(seg_out, seg_gt.long())
+
+    total_loss = flow_loss + 0.5 * seg_loss
+
     metrics = {
         'epe': epe.mean().item(),
         '1px': (epe < 1).float().mean().item(),
         '3px': (epe < 3).float().mean().item(),
         '5px': (epe < 5).float().mean().item(),
+        'seg_loss':seg_loss
     }
 
-    return flow_loss, metrics
+    return total_loss, metrics
 
 if __name__=='__main__':
     import argparse

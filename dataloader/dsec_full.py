@@ -14,7 +14,7 @@ import imageio.v2 as imageio
 import cv2
 
 class DSECfull(data.Dataset):
-    def __init__(self, phase):
+    def __init__(self, phase, crop:bool = True, flip:bool=True, spatial_aug:bool=True):
         assert phase in ["train", "trainval", "test"]
 
         self.init_seed = False
@@ -23,11 +23,14 @@ class DSECfull(data.Dataset):
         self.files = []
         self.flows = []
 
+        self.augment = crop or flip or spatial_aug
+        crop_size = [288, 384] if crop else None
+
         ### Please change the root to satisfy your data saving setting.
         root = 'datasets/dsec_full'
         if phase == 'train' or phase == 'trainval':
             self.root = os.path.join(root, 'trainval')
-            self.augmentor = Augmentor(crop_size=[288, 384])
+            self.augmentor = Augmentor(crop_size, do_flip=flip, spatial_aug = spatial_aug)
         else:
             self.root = os.path.join(root, 'test')
 
@@ -75,7 +78,6 @@ class DSECfull(data.Dataset):
         voxel1 = events_file['events_prev'].transpose(1, 2, 0)
         voxel2 = events_file['events_curr'].transpose(1, 2, 0)
 
-
         #flow
         if self.phase == "train" or self.phase == "trainval":
             #image
@@ -86,7 +88,9 @@ class DSECfull(data.Dataset):
             
             flow_16bit = np.load(self.flows[index])
             flow_map, valid2D = flow_16bit_to_float(flow_16bit)
-            voxel1, voxel2, flow_map, valid2D, img, seg = self.augmentor(voxel1, voxel2, flow_map, valid2D, img, seg)
+
+            if self.augment:
+                voxel1, voxel2, flow_map, valid2D, img, seg = self.augmentor(voxel1, voxel2, flow_map, valid2D, img, seg)
 
             img = torch.from_numpy(img).permute(2, 0, 1).float()
             seg = torch.from_numpy(seg).float()
@@ -131,8 +135,8 @@ def flow_16bit_to_float(flow_16bit: np.ndarray):
     return flow_map, valid2D
 
 
-def make_data_loader(phase, batch_size, num_workers):
-    dset = DSECfull(phase)
+def make_data_loader(phase, batch_size, num_workers, crop = True, flip = True, spatial_aug = True):
+    dset = DSECfull(phase, crop, flip, spatial_aug)
     loader = data.DataLoader(
         dset,
         batch_size=batch_size,

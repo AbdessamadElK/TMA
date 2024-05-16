@@ -4,6 +4,9 @@ from matplotlib import colors
 from skimage import io
 import cv2
 
+from .cityscapes_labels import labels_19
+
+
 def visualize_optical_flow(flow, savepath=None, return_image=False, text=None, scaling=None):
     # flow -> numpy array 2 x height x width
     # 2,h,w -> h,w,2
@@ -46,17 +49,45 @@ def writer_add_features(tensor_feat):
     return img_grid
 
 
-import numpy as np
-
-from .cityscapes_labels import labels_19
-
-def segmentation2rgb_19(seg:np.ndarray)-> np.ndarray:
+def segmentation2rgb_19(seg:numpy.ndarray)-> numpy.ndarray:
     # Visualize semantic segmentation according to cityscapes labels
     # Seg.shape : [h, w]
     h, w = seg.shape
-    visualization = np.zeros((h, w, 3))
+    visualization = numpy.zeros((h, w, 3))
 
     for label in filter(lambda label : 0 <= label.trainId < 19, labels_19):
-        visualization[seg == label.trainId] = np.array(label.color)
+        visualization[seg == label.trainId] = numpy.array(label.color)
 
     return visualization.astype('uint8')
+
+def get_vis_matrix(flow_pred, flow_gt, valid2D, seg_pred, seg_gt, img, seg_opacity = 0.6):
+    preds = []
+    ground_truths = []
+
+    # Optical flow
+    flow_pred_vis, _ = visualize_optical_flow(flow_pred)
+    preds.append(flow_pred_vis * 255)
+    
+    flow_gt = flow_gt.transpose(1, 2, 0)
+    flow_gt[valid2D == 0] = 0
+    flow_gt_vis, _ = visualize_optical_flow(flow_gt.transpose(2, 0, 1))
+    ground_truths.append(flow_gt_vis * 255)
+
+    # Semantic Segmentation
+    seg_pred_vis = segmentation2rgb_19(seg_pred)
+    preds.append(seg_pred_vis)
+
+    seg_gt_vis = segmentation2rgb_19(seg_gt)
+    ground_truths.append(seg_gt_vis)
+
+    # Image + seg
+    img = img.transpose(1, 2, 0)
+    preds.append((1-seg_opacity) * img + seg_opacity * seg_pred_vis)
+    ground_truths.append(img)
+
+    # Construct matrix
+    row1 = numpy.hstack(preds)
+    row2 = numpy.hstack(ground_truths)
+    matrix = numpy.vstack([row1, row2])
+
+    return matrix

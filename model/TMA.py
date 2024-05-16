@@ -57,8 +57,6 @@ class TMA(nn.Module):
         # Low level features for semantic segmentation
         fmaps_all = torch.cat(fmaps, dim=1)
 
-        visualization_output["fmap_all"] = fmaps_all[0]
-
         # Context map [net, inp]
         cmap = self.cnet(torch.cat(voxels, dim=1))
         net, inp = torch.split(cmap, [128, 128], dim=1)
@@ -101,9 +99,6 @@ class TMA(nn.Module):
             if self.training:
                 flow_up = self.upsample_flow(coords1 - coords0, upmask)
                 flow_predictions.append(flow_up)
-
-
-        visualization_output["gru_output"] = net[0]
 
         # Run segmentation network
         segmentation = self.deeplab(fmaps_all, net)

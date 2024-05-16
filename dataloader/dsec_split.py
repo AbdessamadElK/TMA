@@ -9,6 +9,8 @@ import glob
 from .augment import Augmentor
 from .representation import VoxelGrid
 
+import imageio.v2 as imageio
+
 class DSECsplit(data.Dataset):
     def __init__(self, phase):
         self.init_seed = False
@@ -30,6 +32,14 @@ class DSECsplit(data.Dataset):
         self.files.sort()
         self.flows = glob.glob(os.path.join(self.root, '*', 'flow_*.npy'))
         self.flows.sort()
+
+        if phase == 'train' or phase == 'trainval':
+            # Include images and semantic segmentation (temporally not implemented for test)
+            self.images = glob.glob(os.path.join(self.root, '*', 'images', '*.png'))
+            self.images.sort()
+
+            self.segmentations = glob.glob(os.path.join(self.root, '*', 'segmentation', '*.png'))
+            self.segmentations.sort()
 
     def events_to_voxel_grid(self, x, y, p, t):
         t = (t - t[0]).astype('float32')
@@ -55,33 +65,31 @@ class DSECsplit(data.Dataset):
                 random.seed(worker_info.id)
                 self.init_seed = True
         
-        #events
+         #events
         events_file = np.load(self.files[index])
-        events1 = events_file['events_prev']
-        x = events1[:, 0]
-        y = events1[:, 1]
-        t = events1[:, 2]
-        p = events1[:, 3]
-        voxel1 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).numpy()
-
-        events2 = events_file['events_curr']
-        x = events2[:, 0]
-        y = events2[:, 1]
-        t = events2[:, 2]
-        p = events2[:, 3]
-        voxel2 = self.events_to_voxel_grid(x, y, p, t).permute(1, 2, 0).numpy()        
+        voxel1 = events_file['events_prev'].transpose(1, 2, 0)
+        voxel2 = events_file['events_curr'].transpose(1, 2, 0)       
 
         #flow
         flow_16bit = np.load(self.flows[index])
         flow_map, valid2D = flow_16bit_to_float(flow_16bit)
         if self.phase == 'train':
-            voxel1, voxel2, flow_map, valid2D = self.augmentor(voxel1, voxel2, flow_map, valid2D)
+            #image
+            img = imageio.imread(self.images[index])
+
+            #segmentation
+            seg = imageio.imread(self.segmentations[index])
+            voxel1, voxel2, flow_map, valid2D, img, seg = self.augmentor(voxel1, voxel2, flow_map, valid2D, img, seg)
+
+        img = torch.from_numpy(img).permute(2, 0, 1).float()
+        seg = torch.from_numpy(seg).float()
         
         voxel1 = torch.from_numpy(voxel1).permute(2, 0, 1).float()
         voxel2 = torch.from_numpy(voxel2).permute(2, 0, 1).float()
         flow_map = torch.from_numpy(flow_map).permute(2, 0, 1).float()
         valid2D = torch.from_numpy(valid2D).float()
-        return voxel1, voxel2, flow_map, valid2D
+        
+        return voxel1, voxel2, flow_map, valid2D, img, seg
     
     def __len__(self):
         return len(self.files)

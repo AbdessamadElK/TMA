@@ -19,7 +19,7 @@ from datetime import datetime
 from torchvision.transforms import v2
 from flow_vis import flow_to_color
 
-from utils.visualization import writer_add_features, segmentation2rgb_19
+from utils.visualization import writer_add_features, segmentation2rgb_19, get_vis_matrix
 
 MAX_FLOW = 400
 SUM_FREQ = 100
@@ -95,6 +95,11 @@ class Trainer:
             pct_start=0.01,
             cycle_momentum=False,
             anneal_strategy='linear')
+        
+        # Segmentation Loss function
+        self.segloss_fn = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
+        self.segloss_weight = args.segloss_weight
+
         #Logger
         self.checkpoint_dir = args.checkpoint_dir
         if not os.path.exists(self.checkpoint_dir):
@@ -145,7 +150,9 @@ class Trainer:
                 self.optimizer.zero_grad()
                 flow_preds, seg_out, vis_output = self.model(voxel1.cuda(), voxel2.cuda())
 
-                flow_loss, loss_metrics = sequence_loss(flow_preds, flow_map.cuda(), valid2D.cuda(), seg_out, seg_gt.cuda(), self.args.weight, MAX_FLOW)
+                flow_loss, loss_metrics = sequence_loss(flow_preds, flow_map.cuda(), valid2D.cuda(),
+                                                        seg_out, seg_gt.cuda(), self.segloss_fn,
+                                                        self.args.weight, self.segloss_weight, MAX_FLOW)
                 
                 flow_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.args.grad_clip)
@@ -159,13 +166,20 @@ class Trainer:
                     vis_steps += 1
                     with torch.no_grad():
                         #flow_preds: (12, 6, 2, h, w)
-                        flow_sample = flow_preds[-1][0]
-                        visualization = flow_to_color(flow_sample.cpu().numpy().transpose(1, 2, 0), convert_to_bgr = False)
-                        wandb.log({'Optical Flow': wandb.Image(visualization, caption=f"Visualization {vis_steps}")})
-
+                        flow_sample = flow_preds[-1].cpu().numpy()
+                        flow_map = flow_map.numpy()
+                        valid2D = valid2D.numpy()
+                        
                         #segmentation
                         seg_pred = seg_out.detach().max(dim=1)[1].cpu().numpy()
-                        wandb.log({'Segmentation':wandb.Image(segmentation2rgb_19(seg_pred[0]), caption=f"Visualization {vis_steps}")})
+                        seg_gt = seg_gt.numpy()
+
+                        #image
+                        img = img.numpy()
+
+                        #visualization
+                        vis = get_vis_matrix(flow_sample[0], flow_map[0], valid2D[0], seg_pred[0], seg_gt[0], img[0])
+                        wandb.log({'Predictions (top) vs Ground Truths (bottom)':wandb.Image(vis, caption=f"Visualization {vis_steps}")})
 
                         #Features
                         for key, value in vis_output.items():
@@ -243,7 +257,7 @@ def set_seed(seed):
     random.seed(seed)
 
 
-def sequence_loss(flow_preds, flow_gt, valid, seg_out, seg_gt, gamma=0.8, max_flow=MAX_FLOW):
+def sequence_loss(flow_preds, flow_gt, valid, seg_out, seg_gt, segloss_fn, gamma=0.8, lambda_ = 0.5, max_flow=MAX_FLOW):
     """ Loss function defined over sequence of flow predictions """
     n_predictions = len(flow_preds)  
     flow_loss = 0.0
@@ -261,11 +275,10 @@ def sequence_loss(flow_preds, flow_gt, valid, seg_out, seg_gt, gamma=0.8, max_fl
     epe = epe.view(-1)[valid.view(-1)]
 
     """ Segmentation Loss """
-    seg_loss_fn = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
     seg_gt[valid==0] = 255
-    seg_loss = seg_loss_fn(seg_out, seg_gt.long())
+    seg_loss = segloss_fn(seg_out, seg_gt.long())
 
-    total_loss = flow_loss + 0.5 * seg_loss
+    total_loss = flow_loss + lambda_ * seg_loss
 
     metrics = {
         'epe': epe.mean().item(),
@@ -304,6 +317,7 @@ if __name__=='__main__':
 
     # loss setting
     parser.add_argument('--weight', type=float, default=0.8)
+    parser.add_argument('--segloss_weight', type=float, default=0.5, help="Segmentation loss weight")
 
     #wandb setting
     parser.add_argument('--wandb', action='store_true', default=False)
