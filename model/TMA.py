@@ -8,7 +8,7 @@ from .aggregate import MotionFeatureEncoder, MPA
 from .update import UpdateBlock
 from .util import coords_grid
 
-from .segmentation import DeepLabV3PlusDecoder
+from .segmentation import DeepLabV3PlusDecoder, SegNet
 
 class TMA(nn.Module):
     def __init__(self, input_bins=15):
@@ -27,7 +27,7 @@ class TMA(nn.Module):
 
         self.update = UpdateBlock(hidden_dim=128, split=self.split)
 
-        self.deeplab = DeepLabV3PlusDecoder(128 * (self.split+1), 128, num_classes = 19, upsample_scale = 8)
+        self.segnet = SegNet(128 * (self.split + 1), 128, num_classes=19, upsample_scale=8)
 
     def upsample_flow(self, flow, mask, scale=8):
         """ Upsample flow field [H/8, W/8, 2] -> [H, W, 2] using convex combination """
@@ -101,7 +101,7 @@ class TMA(nn.Module):
                 flow_predictions.append(flow_up)
 
         # Run segmentation network
-        segmentation = self.deeplab(fmaps_all, net)
+        segmentation = self.segnet(fmaps_all, net)
 
         if self.training:
             return flow_predictions, segmentation, visualization_output

@@ -33,3 +33,17 @@ class DeepLabV3PlusDecoder(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
+
+class SegNet(nn.Module):
+    def __init__(self, high_level_channels, low_level_channels, num_classes, upsample_scale = 8):
+        self.deeplab = DeepLabV3PlusDecoder(high_level_channels, low_level_channels, num_classes, upsample_scale)
+
+        # Additional residual blocks
+        hidden_channels = num_classes * 10
+        self.block1 = Resblock(num_classes, hidden_channels)
+        self.block2 = Resblock(hidden_channels, num_classes)
+
+    def __forward__(self, low_level_features, high_level_features):
+        seg_out = self.deeplab(low_level_features, high_level_features)
+        seg_out = self.block2(self.block1(seg_out))
+        return seg_out
