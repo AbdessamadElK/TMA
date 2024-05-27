@@ -44,7 +44,7 @@ class SegNet(nn.Module):
         self.block1 = Resblock(num_classes, hidden_channels)
         self.block2 = Resblock(hidden_channels, num_classes)
 
-    def __forward__(self, low_level_features, high_level_features):
+    def forward(self, low_level_features, high_level_features):
         seg_out = self.deeplab(low_level_features, high_level_features)
         seg_out = self.block2(self.block1(seg_out))
         return seg_out
