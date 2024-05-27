@@ -2,6 +2,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from backbone import Resblock
+
 class DeepLabV3PlusDecoder(nn.Module):
     def __init__(self, high_level_channels, low_level_channels, num_classes, upsample_scale):
         super(DeepLabV3PlusDecoder, self).__init__()
@@ -30,3 +32,4 @@ class DeepLabV3PlusDecoder(nn.Module):
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
+

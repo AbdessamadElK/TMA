@@ -106,7 +106,7 @@ class TMA(nn.Module):
         if self.training:
             return flow_predictions, segmentation, visualization_output
         else:
-            return self.upsample_flow(coords1 - coords0, upmask)
+            return self.upsample_flow(coords1 - coords0, upmask), segmentation
 
 if __name__=='__main__':
     input1 = torch.rand(2,15,288,384)

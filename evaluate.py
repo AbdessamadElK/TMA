@@ -23,7 +23,7 @@ def validate_DSEC(model):
     seg_loss_fn = nn.CrossEntropyLoss(ignore_index=255, reduction = 'mean')
 
     # Visualization index
-    vis_idx = np.random.randint(0, len(val_dataset)) 
+    vis_idx = np.random.randint(0, len(val_dataset))
     random_vis = None   
 
     bar = tqdm(enumerate(val_dataset),total=len(val_dataset), ncols=60)
@@ -31,7 +31,9 @@ def validate_DSEC(model):
     for index, (voxel1, voxel2, flow_map, valid2D, img, seg_gt) in bar:
         voxel1 = voxel1[None].cuda()
         voxel2 = voxel2[None].cuda() 
-        flow_pred, seg_out, _ = model(voxel1, voxel2)[0].cpu()#[1,2,H,W]
+        flow_pred, seg_out = model(voxel1, voxel2)#[1,2,H,W]
+        flow_pred = flow_pred[0].cpu()
+        seg_out = seg_out[0].cpu()
 
         # Flow loss
         epe = torch.sum((flow_pred- flow_map)**2, dim=0).sqrt()#[H,W]
@@ -46,7 +48,7 @@ def validate_DSEC(model):
         out_list.append(out[val].cpu().numpy())
 
         # Segmentation loss
-        seg_loss = seg_loss_fn(seg_out, seg_gt.long())
+        seg_loss = seg_loss_fn(seg_out[None], seg_gt[None].long())
         seg_loss_list.append(seg_loss)
 
         # Generate visualization
@@ -55,7 +57,7 @@ def validate_DSEC(model):
             flow_map = flow_map.numpy()
             valid2D = valid2D.numpy()
 
-            seg_pred = seg_out.detach().max(dim=1)[1].cpu().numpy()
+            seg_pred = seg_out.detach().max(dim=0)[1].cpu().numpy()
             seg_gt = seg_gt.numpy()
 
             img = img.numpy()

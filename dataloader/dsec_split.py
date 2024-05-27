@@ -33,13 +33,11 @@ class DSECsplit(data.Dataset):
         self.flows = glob.glob(os.path.join(self.root, '*', 'flow_*.npy'))
         self.flows.sort()
 
-        if phase == 'train' or phase == 'trainval':
-            # Include images and semantic segmentation (temporally not implemented for test)
-            self.images = glob.glob(os.path.join(self.root, '*', 'images', '*.png'))
-            self.images.sort()
+        self.images = glob.glob(os.path.join(self.root, '*', 'images', '*.png'))
+        self.images.sort()
 
-            self.segmentations = glob.glob(os.path.join(self.root, '*', 'segmentation', '*.png'))
-            self.segmentations.sort()
+        self.segmentations = glob.glob(os.path.join(self.root, '*', 'segmentation', '*.png'))
+        self.segmentations.sort()
 
     def events_to_voxel_grid(self, x, y, p, t):
         t = (t - t[0]).astype('float32')
@@ -73,12 +71,13 @@ class DSECsplit(data.Dataset):
         #flow
         flow_16bit = np.load(self.flows[index])
         flow_map, valid2D = flow_16bit_to_float(flow_16bit)
-        if self.phase == 'train':
-            #image
-            img = imageio.imread(self.images[index])
+        #image
+        img = imageio.imread(self.images[index])
 
-            #segmentation
-            seg = imageio.imread(self.segmentations[index])
+        #segmentation
+        seg = imageio.imread(self.segmentations[index])
+        
+        if self.phase == 'train':
             voxel1, voxel2, flow_map, valid2D, img, seg = self.augmentor(voxel1, voxel2, flow_map, valid2D, img, seg)
 
         img = torch.from_numpy(img).permute(2, 0, 1).float()

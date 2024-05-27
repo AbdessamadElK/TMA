@@ -8,8 +8,11 @@ import wandb
 import torch
 from torch import nn
 import numpy as np
+
 from utils.file_utils import get_logger
 from dataloader.dsec_full import make_data_loader
+
+from utils.supervision import sequence_loss
 
 ####Important####
 from model.TMA import TMA
@@ -50,6 +53,7 @@ class Loss_Tracker:
             if self.wandb:
                 wandb.log({'EPE': self.running_loss['epe']/SUM_FREQ}, step=self.total_steps)
                 wandb.log({'Segmentation Crossentropy':self.running_loss['seg_loss']/SUM_FREQ}, step=self.total_steps)
+                # wandb.log({'Experimental Loss':self.running_loss['experimental_loss']/SUM_FREQ}, step=self.total_steps)
             self.running_loss = {}
         
     def state_dict(self):
@@ -256,44 +260,6 @@ def set_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
 
-
-def sequence_loss(flow_preds, flow_gt, valid, seg_out, seg_gt, segloss_fn, gamma=0.8, lambda_ = 0.5, max_flow=MAX_FLOW):
-    """ Loss function defined over sequence of flow predictions """
-    n_predictions = len(flow_preds)  
-    flow_loss = 0.0
-
-    # exlude invalid pixels and extremely large diplacements
-    mag = torch.sum(flow_gt**2, dim=1).sqrt()#b,h,w
-    valid = (valid >= 0.5) & (mag < max_flow)#b,1,h,w
-
-    for i in range(n_predictions):
-        i_weight = gamma**(n_predictions - i - 1)
-        i_loss = (flow_preds[i] - flow_gt).abs()
-        flow_loss += i_weight * (valid[:, None] * i_loss).mean()
-
-    epe = torch.sum((flow_preds[-1] - flow_gt)**2, dim=1).sqrt()
-    epe = epe.view(-1)[valid.view(-1)]
-
-    """ Segmentation Loss """
-    seg_gt[valid==0] = 255
-    seg_loss = segloss_fn(seg_out, seg_gt.long())
-
-    total_loss = flow_loss + lambda_ * seg_loss
-
-    metrics = {
-        'epe': epe.mean().item(),
-        '1px': (epe < 1).float().mean().item(),
-        '3px': (epe < 3).float().mean().item(),
-        '5px': (epe < 5).float().mean().item(),
-        'seg_loss':seg_loss
-    }
-
-    return total_loss, metrics
-
-
-def segmentation_loss(seg_pred, seg_gt):
-    # Pixel wise cross-entropy loss
-    pass
 
 
         

@@ -19,7 +19,7 @@ OUTPUT_PATH = "C:/users/abdessamad/TMA_DSEC_VIDEO"
 
 OUTPUT_SINGLE = "C:/users/abdessamad/TMA_DSEC_VIDEO/no_aug.mp4"
 
-INCLUDE_SEGMENTATION = False
+INCLUDE_SEGMENTATION = True
 
 def flow_16bit_to_float(flow_16bit: np.ndarray):
     assert flow_16bit.dtype == np.uint16

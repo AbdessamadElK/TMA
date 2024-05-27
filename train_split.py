@@ -8,14 +8,18 @@ import wandb
 import torch
 from torch import nn
 import numpy as np
+from datetime import datetime
 
 
 from dataloader.dsec_split import make_data_loader
 from utils.file_utils import get_logger
+
+from utils.supervision import sequence_loss
+
 from evaluate import validate_DSEC
 from model.TMA import TMA
 
-from utils.visualization import get_vis_matrix, writer_add_features
+from utils.visualization import get_vis_matrix, writer_add_features, segmentation2rgb_19
 
 MAX_FLOW = 400
 
@@ -44,6 +48,7 @@ class Loss_Tracker:
             if self.wandb:
                 wandb.log({'Train-EPE': self.running_loss['epe']/SUM_FREQ}, step=self.total_steps)
                 wandb.log({'Segmentation Crossentropy':self.running_loss['seg_loss']/SUM_FREQ}, step=self.total_steps)
+                # wandb.log({'Edges Loss':self.running_loss['edges_loss']/SUM_FREQ}, step=self.total_steps)
             self.running_loss = {}
 
     def state_dict(self):
@@ -68,6 +73,12 @@ class Trainer:
         self.train_loader = make_data_loader('train', args.batch_size, args.num_workers)
         print('Train loader Done!')
 
+        self.date_label = datetime.now().strftime("%Y-%m-%d")
+        self.save_path = os.path.join(args.checkpoint_dir, self.date_label)
+
+        if not os.path.isdir(self.save_path):
+            os.makedirs(self.save_path)
+
         #Optimizer and scheduler for training
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(),
@@ -84,6 +95,7 @@ class Trainer:
         
          # Segmentation Loss function
         self.seg_loss_fn = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
+        self.segloss_weight = args.segloss_weight
 
         #Logger
         self.checkpoint_dir = args.checkpoint_dir
@@ -135,7 +147,7 @@ class Trainer:
                 flow_preds, seg_out, vis_output = self.model(voxel1.cuda(), voxel2.cuda())
                 flow_loss, loss_metrics = sequence_loss(flow_preds, flow_map.cuda(), valid2D.cuda(),
                                                         seg_out, seg_gt.cuda(), self.seg_loss_fn,
-                                                        self.args.weight, MAX_FLOW)
+                                                        self.args.weight, self.segloss_weight, MAX_FLOW)
 
                 flow_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.args.grad_clip)
@@ -240,38 +252,6 @@ def set_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
 
-def sequence_loss(flow_preds, flow_gt, valid, seg_out, seg_gt, seg_loss_fn, gamma=0.8, max_flow=MAX_FLOW):
-    """ Loss function defined over sequence of flow predictions """
-    n_predictions = len(flow_preds)  
-    flow_loss = 0.0
-
-    # exlude invalid pixels and extremely large diplacements
-    mag = torch.sum(flow_gt**2, dim=1).sqrt()#b,h,w
-    valid = (valid >= 0.5) & (mag < max_flow)#b,1,h,w
-
-    for i in range(n_predictions):
-        i_weight = gamma**(n_predictions - i - 1)
-        i_loss = (flow_preds[i] - flow_gt).abs()
-        flow_loss += i_weight * (valid[:, None] * i_loss).mean()
-
-    epe = torch.sum((flow_preds[-1] - flow_gt)**2, dim=1).sqrt()
-    epe = epe.view(-1)[valid.view(-1)]
-
-    """ Segmentation Loss """
-    seg_gt[valid==0] = 255
-    seg_loss = seg_loss_fn(seg_out, seg_gt.long())
-
-    total_loss = flow_loss + 0.5 * seg_loss
-
-    metrics = {
-        'epe': epe.mean().item(),
-        '1px': (epe < 1).float().mean().item(),
-        '3px': (epe < 3).float().mean().item(),
-        '5px': (epe < 5).float().mean().item(),
-        'seg_loss':seg_loss
-    }
-
-    return total_loss, metrics
 
 if __name__=='__main__':
     import argparse
@@ -292,7 +272,12 @@ if __name__=='__main__':
 
     # loss setting
     parser.add_argument('--weight', type=float, default=0.8)
+    parser.add_argument('--segloss_weight', type=float, default=0.5, help="Segmentation loss weight")
 
+    #Loading pretrained models
+    parser.add_argument('--model_path', type=str, default="", help="Path to existing model to be loaded")
+    parser.add_argument('--continue_training', action='store_true', default=False, help="Continue learning with previous params")
+        
     # wandb project setting
     parser.add_argument('--wandb', action='store_true', default=False)
 
