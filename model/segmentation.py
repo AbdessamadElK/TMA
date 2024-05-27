@@ -36,6 +36,7 @@ class DeepLabV3PlusDecoder(nn.Module):
 
 class SegNet(nn.Module):
     def __init__(self, high_level_channels, low_level_channels, num_classes, upsample_scale = 8):
+        super(SegNet, self).__init__()
         self.deeplab = DeepLabV3PlusDecoder(high_level_channels, low_level_channels, num_classes, upsample_scale)
 
         # Additional residual blocks
