@@ -40,9 +40,8 @@ class SegNet(nn.Module):
         self.deeplab = DeepLabV3PlusDecoder(high_level_channels, low_level_channels, num_classes, upsample_scale)
 
         # Additional residual blocks
-        hidden_channels = num_classes * 10
-        self.block1 = Resblock(num_classes, hidden_channels)
-        self.block2 = Resblock(hidden_channels, num_classes)
+        self.block1 = Resblock(num_classes, num_classes)
+        self.block2 = Resblock(num_classes, num_classes)
 
     def forward(self, low_level_features, high_level_features):
         seg_out = self.deeplab(low_level_features, high_level_features)
