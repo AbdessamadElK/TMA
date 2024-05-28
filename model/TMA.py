@@ -106,9 +106,9 @@ class TMA(nn.Module):
         # Run segmentation network
         fmaps_low = self.resnet_low(fmaps_all)
         segmentation = self.deeplab(fmaps_low, net)
-        
-        visualization_output['ResNet_Input'] = fmaps_all
-        visualization_output['ResNet_Output'] = fmaps_low
+
+        visualization_output['ResNet_Input'] = fmaps_all[0]
+        visualization_output['ResNet_Output'] = fmaps_low[0]
 
         if self.training:
             return flow_predictions, segmentation, visualization_output
