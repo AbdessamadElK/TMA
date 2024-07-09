@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .backbone import ExtractorF, ExtractorC, ResnetBlock
+from .backbone import ExtractorF, ExtractorC, ResnetBlock, build_resnet
 from .corr import CorrBlock
 from .aggregate import MotionFeatureEncoder, MPA
 from .update import UpdateBlock
@@ -27,8 +27,8 @@ class TMA(nn.Module):
 
         self.update = UpdateBlock(hidden_dim=128, split=self.split)
 
-        self.resnet_low = ResnetBlock(128 * (self.split + 1), padding_type='zero', norm_layer=nn.BatchNorm2d, use_dropout=True, use_bias=True)
-        self.resnet_high = ResnetBlock(128, padding_type='zero', norm_layer=nn.BatchNorm2d, use_dropout=True, use_bias=True)
+        # self.resnet_low = build_resnet(0, 128 * (self.split + 1), dropout=True, bias=True)
+        # self.resnet_high = build_resnet(0, 128, dropout=True, bias=True)
         self.deeplab = DeepLabV3PlusDecoder(128 * (self.split + 1), 128, num_classes=19, upsample_scale=8)
         
 
@@ -75,6 +75,10 @@ class TMA(nn.Module):
         for i in range(self.split):
             corr_fn = CorrBlock(fmaps[0], fmaps[i+1], num_levels=self.corr_level, radius=self.corr_radius) #[c01,c02,...,c05]
             corr_fn_list.append(corr_fn)
+       
+        # Run segmentation network (Low level features branch)
+        # features_low = self.resnet_low(fmaps_all)
+        # inp = torch.cat([inp, features_low], dim=1)
 
         flow_predictions = []
         for iter in range(iters):
@@ -103,12 +107,16 @@ class TMA(nn.Module):
                 flow_up = self.upsample_flow(coords1 - coords0, upmask)
                 flow_predictions.append(flow_up)
 
-        # Run segmentation network
-        fmaps_low = self.resnet_low(fmaps_all)
-        segmentation = self.deeplab(fmaps_low, net)
+        # Ren segmentation network (high level features branch and output)
+        # features_high = self.resnet_high(net)
+        segmentation = self.deeplab(fmaps_all, net)
 
-        visualization_output['ResNet_Input'] = fmaps_all[0]
-        visualization_output['ResNet_Output'] = fmaps_low[0]
+        # Visualize features
+        # features_low = torch.cat([fmaps_all[0], features_low[0]], dim=2)
+        # features_high = torch.cat([net[0], features_high[0]], dim=2)
+
+        visualization_output['low_features'] = fmaps_all[0]
+        visualization_output['high_features'] = net[0]
 
         if self.training:
             return flow_predictions, segmentation, visualization_output

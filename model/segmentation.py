@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from backbone import Resblock
+from .backbone import Resblock
 
 class DeepLabV3PlusDecoder(nn.Module):
     def __init__(self, high_level_channels, low_level_channels, num_classes, upsample_scale):

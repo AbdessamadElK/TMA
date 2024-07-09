@@ -49,6 +49,7 @@ class Loss_Tracker:
                 wandb.log({'Train-EPE': self.running_loss['epe']/SUM_FREQ}, step=self.total_steps)
                 wandb.log({'Segmentation Crossentropy':self.running_loss['seg_loss']/SUM_FREQ}, step=self.total_steps)
                 # wandb.log({'Edges Loss':self.running_loss['edges_loss']/SUM_FREQ}, step=self.total_steps)
+                # wandb.log({'ABL Loss':self.running_loss['abl_loss']/SUM_FREQ}, step=self.total_steps)
             self.running_loss = {}
 
     def state_dict(self):
@@ -267,10 +268,9 @@ if __name__=='__main__':
     parser.add_argument('--num_workers', type=int, default=8)
 
     #model setting
-
     parser.add_argument('--grad_clip', type=float, default=1)
 
-    # loss setting
+    #loss setting
     parser.add_argument('--weight', type=float, default=0.8)
     parser.add_argument('--segloss_weight', type=float, default=0.5, help="Segmentation loss weight")
 

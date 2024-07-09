@@ -196,3 +196,22 @@ class ResnetBlock(nn.Module):
         """Forward function (with skip connections)"""
         out = x + self.conv_block(x)  # add skip connections
         return out
+    
+def build_resnet(num_layers, num_channels, norm = 'BN', dropout = False, bias = False):
+    net = []
+
+    if norm == 'BN':
+        norm = nn.BatchNorm2d
+
+    elif norm =='IN':
+        norm = nn.InstanceNorm2d
+    
+    elif norm == 'None':
+        norm = nn.Sequential
+
+    for _ in range(num_layers):
+        net.append(ResnetBlock(num_channels, 'zero', norm, dropout, bias))
+
+    resnet = nn.Sequential(*net)
+    
+    return resnet
