@@ -99,7 +99,7 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
         else:
             ts_file_flow = flow_path / f'{seq}.csv'
             timestamps_flow = np.genfromtxt(ts_file_flow, delimiter=',')
-            timestamps_flow = timestamps_flow[:,0]
+            timestamps_flow, indexs = timestamps_flow[:,:2], timestamps_flow[:,2]
         
         # Images and image timestamps
         ts_file_img = images_path / seq / 'images' / 'timestamps.txt'
@@ -124,6 +124,8 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
             if events_curr == None:
                 print(f'None data can be converted to voxel in {seq} at {i}th timestamps for current condition!')
                 continue
+            
+            save_idx = i if split == "train" else indexs[i]
 
             # previous events
             dt = 100 * 1000#us
@@ -132,18 +134,18 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
             if events_prev == None:
                 print(f'None data can be converted to voxel in {seq} at {i}th timestamps for previous condition!')
                 continue
-            rectify_and_write(rectify_map, events_curr, events_prev, output_dir, i)
+            rectify_and_write(rectify_map, events_curr, events_prev, output_dir, save_idx)
 
             # optical flow
             if split == "train":
                 flow_16bit = imageio.imread(flow_list[i], format='PNG-FI')
-                np.save(os.path.join(output_dir, 'flow_{:06d}.npy'.format(i)), flow_16bit)
+                np.save(os.path.join(output_dir, 'flow_{:06d}.npy'.format(save_idx)), flow_16bit)
 
             # image
             image_index = np.where(timestamps_img == t_curr)[0].item()
             output_img = output_root / seq / 'images'
             output_img.mkdir(parents=True, exist_ok=True)
-            save_path = output_img / '{:06d}.png'.format(i)
+            save_path = output_img / '{:06d}.png'.format(save_idx)
 
             img = imageio.imread(img_list[image_index])
             h, w = RESOLUTION
@@ -161,7 +163,7 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
                 if not (seg.shape[0] == h and seg.shape[1] == w):
                     seg = cv2.resize(seg, (w, h), interpolation=cv2.INTER_NEAREST)
 
-                save_path = output_seg / '{:06d}.png'.format(i)
+                save_path = output_seg / '{:06d}.png'.format(save_idx)
                 imageio.imwrite(save_path, seg)
 
 
