@@ -22,12 +22,12 @@ from utils.visualization import visualize_optical_flow, segmentation2rgb_19, eve
 import cv2
 
 # Change according to your setting
-INPUT_PATH = "./datasets/dsec_split/train"
-OUTPUT_PATH = "C:/users/abdessamad/TMA_DSEC_VIDEO"
+INPUT_PATH = "./datasets/dsec_full/trainval"
+OUTPUT_PATH = "C:/users/abdessamad/TMA_DSEC_VIDEO/New"
 
 OUTPUT_SINGLE = "C:/users/abdessamad/TMA_DSEC_VIDEO/no_aug.mp4"
 
-INCLUDE_SEGMENTATION = False
+INCLUDE_SEGMENTATION = True
 
 def flow_16bit_to_float(flow_16bit: np.ndarray):
     assert flow_16bit.dtype == np.uint16
@@ -253,5 +253,5 @@ def verify_alignement(sequence = 'all'):
 
 
 if __name__ == "__main__":
-    # dsec_to_vid_separate()
-    verify_alignement()
+    dsec_to_vid_separate()
+    # verify_alignement()

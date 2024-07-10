@@ -8,7 +8,7 @@ from tqdm import tqdm
 import imageio
 import torch
 
-from dataloader.representation import VoxelGrid
+from dataloader.flow_utils import VoxelGrid
 
 TEMPORAL_BINS = 15
 OVERWRITE = True

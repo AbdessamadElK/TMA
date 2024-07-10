@@ -97,6 +97,7 @@ class Trainer:
          # Segmentation Loss function
         self.seg_loss_fn = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
         self.segloss_weight = args.segloss_weight
+        self.mask_loss = args.mask_loss
 
         #Logger
         self.checkpoint_dir = args.checkpoint_dir
@@ -148,7 +149,7 @@ class Trainer:
                 flow_preds, seg_out, vis_output = self.model(voxel1.cuda(), voxel2.cuda())
                 flow_loss, loss_metrics = sequence_loss(flow_preds, flow_map.cuda(), valid2D.cuda(),
                                                         seg_out, seg_gt.cuda(), self.seg_loss_fn,
-                                                        self.args.weight, self.segloss_weight, MAX_FLOW)
+                                                        self.args.weight, self.segloss_weight, self.mask_loss, MAX_FLOW)
 
                 flow_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.args.grad_clip)
@@ -273,6 +274,7 @@ if __name__=='__main__':
     #loss setting
     parser.add_argument('--weight', type=float, default=0.8)
     parser.add_argument('--segloss_weight', type=float, default=0.5, help="Segmentation loss weight")
+    parser.add_argument('--mask_loss', default=False, action="store_true", help="Exclude pixels with non valid flows when calculating segmentation loss")
 
     #Loading pretrained models
     parser.add_argument('--model_path', type=str, default="", help="Path to existing model to be loaded")

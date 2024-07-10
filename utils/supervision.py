@@ -225,7 +225,7 @@ class ABL(nn.Module):
         return loss
 
 
-def sequence_loss(flow_preds, flow_gt, valid, seg_out, seg_gt, segloss_fn, gamma=0.8, lambda_ = 0.5, max_flow=MAX_FLOW):
+def sequence_loss(flow_preds, flow_gt, valid, seg_out, seg_gt, segloss_fn, gamma=0.8, lambda_ = 0.5, mask_loss = False, max_flow=MAX_FLOW):
     """ Loss function defined over sequence of flow predictions """
     n_predictions = len(flow_preds)
     flow_loss = 0.0
@@ -254,8 +254,8 @@ def sequence_loss(flow_preds, flow_gt, valid, seg_out, seg_gt, segloss_fn, gamma
     # New:
     # abl = ABL()
     # abl_loss = abl(seg_out, seg_gt)
-
-    seg_gt[valid == 0] = 255
+    if mask_loss:
+        seg_gt[valid == 0] = 255
     seg_loss = segloss_fn(seg_out, seg_gt.long())
 
     total_loss = flow_loss + lambda_ * seg_loss

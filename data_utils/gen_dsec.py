@@ -5,14 +5,14 @@ import numpy as np
 import os
 from glob import glob
 from tqdm import tqdm
-import imageio
+import imageio.v2 as imageio
 
 import torch
 import cv2
 
 from pathlib import Path
 
-from ..dataloader.representation import VoxelGrid
+from representation import VoxelGrid
 
 RESOLUTION = (480, 640)
 TEMPORAL_BINS = 15
@@ -68,7 +68,8 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
     flow_path = dsec_path / f'{split}_optical_flow'
 
     if images:
-        images_path = dsec_path / f'{split}_images' + distorted * '_distorted'
+        images_path = dsec_path / f'{split}_images'
+        images_distorted_path = dsec_path / f'{split}_images_distorted'
     
     if split == 'train':
         output_root = Path(f'datasets/dsec_full/trainval')
@@ -102,11 +103,16 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
             timestamps_flow = timestamps_flow[:,0]
         
         # Images and image timestamps
-        ts_file_img = images_path / seq / 'images' / 'timestamps.txt'
-        img_dir = images_path / seq / 'images/left'
-        timestamps_img = np.genfromtxt(ts_file_img, delimiter=',')
-        img_list = sorted(img_dir.glob("*.png"))
-        assert timestamps_img.shape[0] == len(img_list)
+        if images:
+            ts_file_img = images_path / seq / 'images' / 'timestamps.txt'
+            if not distorted:
+                img_dir = images_path / seq / 'images/left/rectified'
+            else:
+                img_dir = images_distorted_path / seq / 'distorted'
+
+            timestamps_img = np.genfromtxt(ts_file_img, delimiter=',')
+            img_list = sorted(img_dir.glob("*.png"))
+            assert timestamps_img.shape[0] == len(img_list)
 
         # Semantic segmentation files
         if seg_path is not None:
@@ -140,24 +146,25 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
                 np.save(os.path.join(output_dir, 'flow_{:06d}.npy'.format(i)), flow_16bit)
 
             # image
-            image_index = np.where(timestamps_img == t_curr)[0].item()
-            output_img = output_root / seq / 'images'
-            output_img.mkdir(parents=True, exist_ok=True)
-            save_path = output_img / '{:06d}.png'.format(i)
+            if images:
+                image_index = np.where(timestamps_img == t_curr)[0].item()
+                output_img = output_root / seq / 'images'
+                output_img.mkdir(parents=True, exist_ok=True)
+                save_path = output_img / '{:06d}.png'.format(i)
 
-            img = imageio.imread(img_list[image_index])
-            h, w = RESOLUTION
-            if not (img.shape[0] == h and img.shape[1] == w):
-                img = cv2.resize(img, (w, h))
+                img = imageio.imread(img_list[image_index])
+                h, w = RESOLUTION
+                if not (img.shape[0] == h and img.shape[1] == w):
+                    img = cv2.resize(img, (w, h))
 
-            imageio.imwrite(save_path, img)
+                imageio.imwrite(save_path, img)
 
             # segmentation
             if seg_path is not None:
                 output_seg = output_root / seq / 'segmentation'
                 output_seg.mkdir(parents=True, exist_ok=True)
 
-                seg = imageio.imread(seg_list[image_index])
+                seg = imageio.imread(seg_list[i])
                 if not (seg.shape[0] == h and seg.shape[1] == w):
                     seg = cv2.resize(seg, (w, h), interpolation=cv2.INTER_NEAREST)
 
