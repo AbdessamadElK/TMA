@@ -131,7 +131,7 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
                 print(f'None data can be converted to voxel in {seq} at {i}th timestamps for current condition!')
                 continue
             
-            save_idx = i if split == "train" else indexs[i]
+            save_idx = i if split == "train" else int(indexs[i])
 
             # previous events
             dt = 100 * 1000#us
