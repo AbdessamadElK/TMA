@@ -7,3 +7,7 @@ imageio
 opencv-python
 wandb
 coloredlogs
+scikit-image
+scikit-video
+matplotlib
+flow_vis
