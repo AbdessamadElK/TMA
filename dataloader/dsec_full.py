@@ -8,7 +8,6 @@ from pathlib import Path
 import glob
 
 from .augment import Augmentor
-from .representation import VoxelGrid
 
 class DSECfull(data.Dataset):
     def __init__(self, phase):
@@ -16,7 +15,6 @@ class DSECfull(data.Dataset):
 
         self.init_seed = False
         self.phase = phase
-        self.representation = VoxelGrid((15, 480, 640), normalize=True)
         self.files = []
         self.flows = []
 
@@ -34,21 +32,6 @@ class DSECfull(data.Dataset):
 
         self.flows = glob.glob(os.path.join(self.root, '*', 'flow_*.npy'))
         self.flows.sort()
-
-    def events_to_voxel_grid(self, x, y, p, t):
-        t = (t - t[0]).astype('float32')
-        t = (t/t[-1])
-        x = x.astype('float32')
-        y = y.astype('float32')
-        pol = p.astype('float32')
-        event_data_torch = {
-            'p': torch.from_numpy(pol),
-            't': torch.from_numpy(t),
-            'x': torch.from_numpy(x),
-            'y': torch.from_numpy(y),
-            }
-        return self.representation.convert(event_data_torch)
-
     
     def __getitem__(self, index):
         if not self.init_seed:
