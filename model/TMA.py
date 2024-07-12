@@ -22,6 +22,9 @@ class TMA(nn.Module):
         self.fnet = ExtractorF(input_channel=input_bins//self.split, outchannel=f_channel, norm='IN')
         self.cnet = ExtractorC(input_channel=input_bins//self.split + input_bins, outchannel=256, norm='BN')
 
+        # Segmentation features extractor
+        self.snet = ExtractorF(input_channel=3, outchannel=128, norm='IN')
+
         self.mfe = MotionFeatureEncoder(corr_level=self.corr_level, corr_radius=self.corr_radius)
         self.mpa = MPA(d_model=128)
 
@@ -46,7 +49,7 @@ class TMA(nn.Module):
         return up_flow.reshape(N, C, scale*H, scale*W)
 
 
-    def forward(self, x1, x2, iters=6):
+    def forward(self, x1, x2, seg, iters=6):
         visualization_output = {}
 
         b,_,h,w = x2.shape

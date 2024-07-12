@@ -50,7 +50,7 @@ class FlowHead(nn.Module):
 class UpdateBlock(nn.Module):
     def __init__(self, hidden_dim=128, split=5):
         super(UpdateBlock, self).__init__()
-        self.gru = SepConvGRU(hidden_dim=hidden_dim, input_dim=hidden_dim + 128 * split)
+        self.gru = SepConvGRU(hidden_dim=hidden_dim, input_dim=hidden_dim + 128 * split + 128)
         self.pred = FlowHead(hidden_dim, hidden_channel=256)
         self.mask = nn.Sequential(
             nn.Conv2d(hidden_dim, 256, 3, padding=1),

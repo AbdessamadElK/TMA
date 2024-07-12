@@ -153,7 +153,8 @@ class Trainer:
             for index, (voxel1, voxel2, flow_map, valid2D, img, seg_gt) in bar:
                 # voxel1, voxel2, flow_map, valid2D = self.apply_transforms(data_items)
                 self.optimizer.zero_grad()
-                flow_preds, seg_out, vis_output = self.model(voxel1.cuda(), voxel2.cuda())
+                seg = segmentation2rgb_19(seg_gt)
+                flow_preds, seg_out, vis_output = self.model(voxel1.cuda(), voxel2.cuda(), seg)
 
                 flow_loss, loss_metrics = sequence_loss(flow_preds, flow_map.cuda(), valid2D.cuda(),
                                                         seg_out, seg_gt.cuda(), self.segloss_fn,
