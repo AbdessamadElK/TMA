@@ -23,7 +23,7 @@ import cv2
 
 # Change according to your setting
 INPUT_PATH = "./datasets/dsec_full/trainval"
-OUTPUT_PATH = "C:/users/abdessamad/TMA_DSEC_VIDEO/New"
+OUTPUT_PATH = "C:/users/abdessamad/TMA_DSEC_VIDEO/train"
 
 OUTPUT_SINGLE = "C:/users/abdessamad/TMA_DSEC_VIDEO/no_aug.mp4"
 
@@ -106,6 +106,51 @@ def dsec_to_vid_separate():
             frame = np.vstack(rows)
 
             writer.writeFrame(frame.astype('uint8'))
+
+        writer.close()
+
+def dsec_to_vid_test(input_path:Path, output_path:Path, segmentation = False):
+    assert input_path.is_dir()
+    seq_dirs = input_path.iterdir()
+    Path(output_path).mkdir(parents = True, exist_ok = True)
+
+    for seq_path in seq_dirs:
+        if not seq_path.is_dir():
+            continue
+        # Locate all types of data
+        image_files = glob(str(seq_path/'images'/'*.png'))
+        image_files.sort()
+
+        if segmentation:
+            seg_files = glob(str(seq_path/'segmentation'/'*.png'))
+            seg_files.sort()
+
+        # Save path
+        save_path = Path(output_path) / f"{seq_path.name}.mp4"
+
+        writer = io.FFmpegWriter(str(save_path), outputdict={"-pix_fmt": "yuv420p"})
+
+        for idx in tqdm(range(len(image_files)), desc=seq_path.name):
+            # image
+            img = imageio.imread(image_files[idx])
+            row = [img]
+        
+            # segmentation ground truth
+            if segmentation:
+                seg = imageio.imread(seg_files[idx])
+                seg_vis = segmentation2rgb_19(seg)
+
+                # seg_mask1 = seg_vis.copy()
+                # seg_mask1[valid2D == 0] = np.array([0, 0, 0])
+
+                row = row + [0.6 * seg_vis + 0.4 * img, seg_vis]
+
+                frame = np.hstack(row)
+                writer.writeFrame(frame.astype('uint8'))
+
+                continue
+            
+            writer.writeFrame(img.astype('uint8'))
 
         writer.close()
 
@@ -253,5 +298,12 @@ def verify_alignement(sequence = 'all'):
 
 
 if __name__ == "__main__":
-    dsec_to_vid_separate()
+    TRAIN_INPUT = Path("C:/users/abdessamad/TMA/datasets/dsec_full/trainval")
+    TEST_INPUT = Path("C:/users/abdessamad/TMA/datasets/dsec_full/test")
+
+    TRAIN_OUTPUT = Path("C:/users/abdessamad/TMA_DSEC_VIDEO/train")
+    TEST_OUTPUT = Path("C:/users/abdessamad/TMA_DSEC_VIDEO/test")
+
+    # dsec_to_vid_separate()
     # verify_alignement()
+    dsec_to_vid_test(TEST_INPUT, Path("C:/users/abdessamad/TMA_DSEC_VIDEO_TEST"), segmentation=True)

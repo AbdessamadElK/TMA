@@ -12,7 +12,7 @@ from dataloader.dsec_full import DSECfull
 from model.TMA import TMA
 
 import flow_vis
-from utils.visualization import visualize_optical_flow
+from utils.visualization import visualize_optical_flow, segmentation2rgb_19
 
 
 def save_flow_submission(save_dir: Path, flow: np.ndarray, file_index: int):
@@ -60,10 +60,11 @@ def generate_submission(model, save_path:str, visualize_flow = False, visualizat
         vis_path = save_path / "visualization"
         save_path = save_path / "submission"
 
-    for voxel1, voxel2, submission_coords in bar:
+    for voxel1, voxel2, seg, submission_coords in bar:
         voxel1 = voxel1[None].cuda()
         voxel2 = voxel2[None].cuda() 
-        flow_pred, _ = model(voxel1, voxel2)
+        seg = segmentation2rgb_19(seg)
+        flow_pred, _ = model(voxel1, voxel2, seg)
         flow_pred = flow_pred[0].cpu()#[1,2,H,W]
 
         sequence, file_index = submission_coords
