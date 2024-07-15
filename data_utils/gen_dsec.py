@@ -65,7 +65,6 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
     if split == 'trainval' : split  = 'train'
 
     event_path = dsec_path / f'{split}_events'
-    flow_path = dsec_path / f'{split}_optical_flow'
 
     if images:
         images_path = dsec_path / f'{split}_images'
@@ -73,6 +72,7 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
     
     if split == 'train':
         output_root = Path(f'datasets/dsec_full/trainval')
+        flow_path = dsec_path / f'{split}_optical_flow'
         sequences = [seq.name for seq in flow_path.iterdir()]
     else:
         output_root = Path(f'datasets/dsec_full/test')
@@ -131,7 +131,6 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
                 print(f'None data can be converted to voxel in {seq} at {i}th timestamps for current condition!')
                 continue
             
-            save_idx = i if split == "train" else int(indexs[i])
 
             # previous events
             dt = 100 * 1000#us
@@ -140,6 +139,8 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
             if events_prev == None:
                 print(f'None data can be converted to voxel in {seq} at {i}th timestamps for previous condition!')
                 continue
+
+            save_idx = i if split == "train" else int(indexs[i])
             rectify_and_write(rectify_map, events_curr, events_prev, output_dir, save_idx)
 
             # optical flow
