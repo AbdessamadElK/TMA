@@ -168,11 +168,12 @@ def get_vis_matrix(flow_pred, flow_gt, valid2D, seg_pred, seg_gt, img, seg_opaci
     ground_truths.append(flow_gt_vis * 255)
 
     # Semantic Segmentation
-    seg_pred_vis = segmentation2rgb_19(seg_pred[None])
-    preds.append(seg_pred_vis[0])
+    seg_pred_vis = segmentation2rgb_19(seg_pred[None]).squeeze()
+    preds.append(seg_pred_vis)
 
-    seg_gt_vis = segmentation2rgb_19(seg_gt[None])
-    ground_truths.append(seg_gt_vis[0])
+    seg_gt_vis = segmentation2rgb_19(seg_gt[None]).squeeze()
+    ground_truths.append(seg_gt_vis)
+
 
     # Image + seg
     img = img.transpose(1, 2, 0)
