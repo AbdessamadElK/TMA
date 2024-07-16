@@ -144,12 +144,13 @@ def writer_add_features(tensor_feat):
 
 def segmentation2rgb_19(seg:numpy.ndarray)-> numpy.ndarray:
     # Visualize semantic segmentation according to cityscapes labels
-    # Seg.shape : [h, w]
-    h, w = seg.shape
-    visualization = numpy.zeros((h, w, 3))
+    # Seg.shape : [N, h, w] where N is the batch size
+    N, h, w = seg.shape
+    visualization = numpy.zeros((N, h, w, 3))
 
     for label in filter(lambda label : 0 <= label.trainId < 19, labels_19):
-        visualization[seg == label.trainId] = numpy.array(label.color)
+        for c in range(N):
+            visualization[c][seg[c] == label.trainId] = numpy.array(label.color)
 
     return visualization.astype('uint8')
 
@@ -167,11 +168,11 @@ def get_vis_matrix(flow_pred, flow_gt, valid2D, seg_pred, seg_gt, img, seg_opaci
     ground_truths.append(flow_gt_vis * 255)
 
     # Semantic Segmentation
-    seg_pred_vis = segmentation2rgb_19(seg_pred)
-    preds.append(seg_pred_vis)
+    seg_pred_vis = segmentation2rgb_19(seg_pred[None])
+    preds.append(seg_pred_vis[0])
 
-    seg_gt_vis = segmentation2rgb_19(seg_gt)
-    ground_truths.append(seg_gt_vis)
+    seg_gt_vis = segmentation2rgb_19(seg_gt[None])
+    ground_truths.append(seg_gt_vis[0])
 
     # Image + seg
     img = img.transpose(1, 2, 0)
