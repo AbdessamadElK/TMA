@@ -121,8 +121,10 @@ class TMA(nn.Module):
         # features_low = torch.cat([fmaps_all[0], features_low[0]], dim=2)
         # features_high = torch.cat([net[0], features_high[0]], dim=2)
 
-        visualization_output['low_features'] = fmaps_all[0]
-        visualization_output['high_features'] = net[0]
+        visualization_output['Events_features'] = fmaps_all[0]
+        visualization_output['Segmentation_features'] = smap[0]
+        visualization_output['Context_features'] = cmap[0]
+        visualization_output['GRU_output'] = net[0]
 
         if self.training:
             return flow_predictions, segmentation, visualization_output

@@ -26,7 +26,7 @@ from utils.visualization import writer_add_features, segmentation2rgb_19, get_vi
 
 MAX_FLOW = 400
 SUM_FREQ = 100
-VIS_FREQ = 20
+VIS_FREQ = 2000
 SAVE_FREQ = 10000
 
 CROP_HEIGTH = 288
