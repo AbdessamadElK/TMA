@@ -3,15 +3,18 @@ import cv2
 cv2.setNumThreads(0)
 cv2.ocl.setUseOpenCL(False)
 
+ORIGINAL_SIZE = (480, 640)
+CROP_SIZE = (288, 384)
 
 class Augmentor:
     def __init__(self, crop_size, spatial_aug = True, min_scale=-0.2, max_scale=0.4, do_flip=True):
         
         # spatial augmentation params
         self.crop_size = crop_size
+        self.do_crop = crop_size != ORIGINAL_SIZE
         self.min_scale = min_scale
         self.max_scale = max_scale
-        self.spatial_aug = spatial_aug
+        self.spatial_aug = spatial_aug and self.do_crop
         self.spatial_aug_prob = 0.8
         # flip augmentation params
         self.do_flip = do_flip
@@ -54,6 +57,7 @@ class Augmentor:
     
     def spatial_transform(self, voxel1, voxel2, flow, valid, img, seg):
         ht, wd = voxel2.shape[:2]
+
         min_scale = np.maximum(
             (self.crop_size[0] + 1) / float(ht), 
             (self.crop_size[1] + 1) / float(wd))
@@ -72,7 +76,7 @@ class Augmentor:
             img = cv2.resize(img, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_LINEAR)
             seg = cv2.resize(seg, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_NEAREST)
         
-        if self.crop_size is not None:
+        if self.do_crop:
             margin_y = int(round(65 * scale_y))#downside
             margin_x = int(round(35 * scale_x))#leftside
 

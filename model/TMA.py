@@ -122,7 +122,8 @@ class TMA(nn.Module):
         # features_high = torch.cat([net[0], features_high[0]], dim=2)
 
         visualization_output['Events_features'] = fmaps_all[0]
-        visualization_output['Segmentation_features'] = smap[0]
+        # visualization_output['Segmentation_features'] = smap[0]
+        visualization_output['Image_features'] = smap[0]
         visualization_output['Context_features'] = cmap[0]
         visualization_output['GRU_output'] = net[0]
 

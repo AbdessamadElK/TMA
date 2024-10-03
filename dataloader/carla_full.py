@@ -12,7 +12,7 @@ from .augment import Augmentor, ORIGINAL_SIZE, CROP_SIZE
 import imageio.v2 as imageio
 import cv2
 
-class DSECfull(data.Dataset):
+class CARLAFull(data.Dataset):
     def __init__(self, phase, crop:bool = True, flip:bool=True, spatial_aug:bool=True):
         assert phase in ["train", "trainval", "test"]
 
@@ -25,15 +25,17 @@ class DSECfull(data.Dataset):
         crop_size = CROP_SIZE if crop else ORIGINAL_SIZE
 
         ### Please change the root to satisfy your data saving setting.
-        root = 'datasets/dsec_full'
+        root = 'datasets/carla_full'
+        self.root = Path(root)
+        
         if phase == 'train' or phase == 'trainval':
             self.root = os.path.join(root, 'trainval')
             self.augmentor = Augmentor(crop_size, do_flip=flip, spatial_aug = spatial_aug)
         else:
             self.root = os.path.join(root, 'test')
 
-
-        self.files = glob.glob(os.path.join(self.root, '*', '*.npz'))
+        self.sequences = 
+        self.files = glob.glob(os.path.join(self.root, '*', 'dvs', '*.npz'))
         self.files.sort()
 
         self.flows = glob.glob(os.path.join(self.root, '*', 'flow_*.npy'))
@@ -119,7 +121,7 @@ def flow_16bit_to_float(flow_16bit: np.ndarray):
 
 
 def make_data_loader(phase, batch_size, num_workers, crop = True, flip = True, spatial_aug = True):
-    dset = DSECfull(phase, crop, flip, spatial_aug)
+    dset = CARLAFull(phase, crop, flip, spatial_aug)
     loader = data.DataLoader(
         dset,
         batch_size=batch_size,
@@ -130,7 +132,7 @@ def make_data_loader(phase, batch_size, num_workers, crop = True, flip = True, s
 
 if __name__ == '__main__':
 
-    dset = DSECfull('test')
+    dset = CARLAFull('test')
     print(len(dset))
     v1, v2, flow, valid = dset[0]
     print(v1.shape, v2.shape, flow.shape, valid.shape)

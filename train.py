@@ -83,7 +83,10 @@ class Trainer:
 
 
         #Loader
-        self.train_loader = make_data_loader('trainval', args.batch_size, args.num_workers)
+        crop = not args.no_crop
+        flip = not args.no_flip
+        spatial = not args.no_spatial
+        self.train_loader = make_data_loader('trainval', args.batch_size, args.num_workers, crop, flip, spatial_aug = spatial)
         print('train_loader done!')
 
         #Optimizer and scheduler for training
@@ -154,7 +157,7 @@ class Trainer:
                 # voxel1, voxel2, flow_map, valid2D = self.apply_transforms(data_items)
                 self.optimizer.zero_grad()
                 seg = torch.from_numpy(segmentation2rgb_19(seg_gt)).float().permute(0, 3, 1, 2)
-                flow_preds, seg_out, vis_output = self.model(voxel1.cuda(), voxel2.cuda(), seg.cuda())
+                flow_preds, seg_out, vis_output = self.model(voxel1.cuda(), voxel2.cuda(), img.cuda())
 
                 flow_loss, loss_metrics = sequence_loss(flow_preds, flow_map.cuda(), valid2D.cuda(),
                                                         seg_out, seg_gt.cuda(), self.segloss_fn,
@@ -279,6 +282,12 @@ if __name__=='__main__':
     #dataloader setting
     parser.add_argument('--batch_size', type=int, default=6)
     parser.add_argument('--num_workers', type=int, default=8)
+
+    #augmentation setting
+    parser.add_argument('--no_crop', default=False, action='store_true', help="Train on the full resolution")
+    parser.add_argument('--no_flip', default=False, action='store_true', help="Deactivate horizontal and vertical flipping of data")
+    parser.add_argument('--no_spatial', default=False, action='store_true', help="Deactivate spatial augmentation (resize)")
+
 
     #model setting
     parser.add_argument('--grad_clip', type=float, default=1)
