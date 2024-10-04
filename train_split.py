@@ -11,7 +11,7 @@ import numpy as np
 from datetime import datetime
 
 
-from dataloader.dsec_split import make_data_loader
+from dataloader.carla_split import make_data_loader
 from utils.file_utils import get_logger
 
 from utils.supervision import sequence_loss
