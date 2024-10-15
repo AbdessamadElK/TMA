@@ -96,6 +96,7 @@ def dsec_to_vid_separate():
             # segmentation ground truth
             if INCLUDE_SEGMENTATION:
                 seg = imageio.imread(seg_files[idx])
+                seg[:-20,:] = 255
                 seg_vis = segmentation2rgb_19(seg)
 
                 # seg_mask1 = seg_vis.copy()
