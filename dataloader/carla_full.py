@@ -27,14 +27,16 @@ class CARLAFull(data.Dataset):
         ### Please change the root to satisfy your data saving setting.
         root = 'datasets/carla_full'
         self.root = Path(root)
-        
+
         if phase == 'train' or phase == 'trainval':
             self.root = os.path.join(root, 'trainval')
             self.augmentor = Augmentor(crop_size, do_flip=flip, spatial_aug = spatial_aug)
         else:
             self.root = os.path.join(root, 'test')
 
-        self.files = glob.glob(os.path.join(self.root, '*', '*.npz'))
+        self.sequences = self.root.iterdir()
+        
+        self.files = glob.glob(os.path.join(self.root, '*', 'dvs', '*.npz'))
         self.files.sort()
 
         self.flows = glob.glob(os.path.join(self.root, '*', 'flow_*.npy'))

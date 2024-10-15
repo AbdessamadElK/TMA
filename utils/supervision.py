@@ -254,18 +254,18 @@ def sequence_loss(flow_preds, flow_gt, valid, seg_out, seg_gt, segloss_fn, gamma
     # New:
     # abl = ABL()
     # abl_loss = abl(seg_out, seg_gt)
-    if mask_loss:
-        seg_gt[valid == 0] = 255
-    seg_loss = segloss_fn(seg_out, seg_gt.long())
+    # if mask_loss:
+    #     seg_gt[valid == 0] = 255
+    # seg_loss = segloss_fn(seg_out, seg_gt.long())
 
-    total_loss = flow_loss + lambda_ * seg_loss
+    # total_loss = flow_loss + lambda_ * seg_loss
+    total_loss = flow_loss
 
     metrics = {
         'epe': epe.mean().item(),
         '1px': (epe < 1).float().mean().item(),
         '3px': (epe < 3).float().mean().item(),
         '5px': (epe < 5).float().mean().item(),
-        'seg_loss':seg_loss
     }
 
     return total_loss, metrics

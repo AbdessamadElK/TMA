@@ -49,7 +49,7 @@ class TMA(nn.Module):
         return up_flow.reshape(N, C, scale*H, scale*W)
 
 
-    def forward(self, x1, x2, seg, iters=6):
+    def forward(self, x1, x2, seg = None, iters=6):
         visualization_output = {}
 
         b,_,h,w = x2.shape
@@ -70,8 +70,8 @@ class TMA(nn.Module):
         inp = torch.relu(inp)
 
         # Segmentation features
-        smap = self.snet(seg)
-        inp = torch.cat([smap, inp], dim=1)
+        # smap = self.snet(seg)
+        # inp = torch.cat([smap, inp], dim=1)
 
         coords0 = coords_grid(b, h//8, w//8, device=cmap.device)
         coords1 = coords_grid(b, h//8, w//8, device=cmap.device)
@@ -121,11 +121,11 @@ class TMA(nn.Module):
         # features_low = torch.cat([fmaps_all[0], features_low[0]], dim=2)
         # features_high = torch.cat([net[0], features_high[0]], dim=2)
 
-        visualization_output['Events_features'] = fmaps_all[0]
+        # visualization_output['Events_features'] = fmaps_all[0]
         # visualization_output['Segmentation_features'] = smap[0]
-        visualization_output['Image_features'] = smap[0]
-        visualization_output['Context_features'] = cmap[0]
-        visualization_output['GRU_output'] = net[0]
+        # visualization_output['Image_features'] = smap[0]
+        # visualization_output['Context_features'] = cmap[0]
+        # visualization_output['GRU_output'] = net[0]
 
         if self.training:
             return flow_predictions, segmentation, visualization_output

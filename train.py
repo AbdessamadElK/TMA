@@ -166,7 +166,9 @@ class Trainer:
                 flow_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.args.grad_clip)
                 self.optimizer.step()
-                self.scheduler.step()
+
+                if total_steps and total_steps % 10 == 0:
+                    self.scheduler.step()
 
                 bar.set_description(f'Step: {total_steps}/{self.args.num_steps}')
                 self.tracker.push(loss_metrics)

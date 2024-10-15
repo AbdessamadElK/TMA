@@ -24,8 +24,8 @@ from utils.visualization import get_vis_matrix, writer_add_features, segmentatio
 MAX_FLOW = 400
 
 SUM_FREQ = 100
-VAL_FREQ = 5000
-VIS_FREQ = 2000
+VAL_FREQ = 3000
+VIS_FREQ = 500
 SAVE_FREQ = 10000
 
 
@@ -47,7 +47,7 @@ class Loss_Tracker:
         if self.total_steps % SUM_FREQ == 0:
             if self.wandb:
                 wandb.log({'Train-EPE': self.running_loss['epe']/SUM_FREQ}, step=self.total_steps)
-                wandb.log({'Segmentation Crossentropy':self.running_loss['seg_loss']/SUM_FREQ}, step=self.total_steps)
+                # wandb.log({'Segmentation Crossentropy':self.running_loss['seg_loss']/SUM_FREQ}, step=self.total_steps)
                 # wandb.log({'Edges Loss':self.running_loss['edges_loss']/SUM_FREQ}, step=self.total_steps)
                 # wandb.log({'ABL Loss':self.running_loss['abl_loss']/SUM_FREQ}, step=self.total_steps)
             self.running_loss = {}
@@ -165,7 +165,7 @@ class Trainer:
                     results.update(validate_DSEC(self.model))
                     if self.args.wandb:
                         wandb.log({'VAL-EPE': results['dsec-epe']}, step=total_steps)
-                        wandb.log({'VAL - Segmentation Crossentropy':results['seg_loss']})
+                        # wandb.log({'VAL - Segmentation Crossentropy':results['seg_loss']})
                         wandb.log({'VAL - Predictions (top) vs Ground Truths (bottom)': wandb.Image(results['visualization'], caption=f"Visualization {val_steps}")})
                     if  results['dsec-epe'] < self.best_epe:
                         ckpt_path = os.path.join(self.args.checkpoint_dir, 'best.pth')
@@ -287,7 +287,7 @@ if __name__=='__main__':
     set_seed(1)
     if args.wandb:
         wandb_name = args.checkpoint_dir.split('/')[-1]
-        wandb.init(name=wandb_name, project='TMA_DSEC_split')
+        wandb.init(name=wandb_name, project='TMA_CARLA')
 
     trainer = Trainer(args)
     trainer.train()

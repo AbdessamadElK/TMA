@@ -7,7 +7,7 @@ import os
 import glob
 
 from .augment import Augmentor
-from representation import VoxelGrid
+from .representation import VoxelGrid
 
 import imageio.v2 as imageio
 
@@ -71,11 +71,14 @@ class CARLAsplit(data.Dataset):
         #flow
         flow_16bit = np.load(self.flows[index])
         flow_map, valid2D = flow_16bit_to_float(flow_16bit)
+
+        flow_map *= 5.0
+
         #image
-        img = imageio.imread(self.images[index])
+        img = imageio.imread(self.images[index])[:,:,:3]
 
         #segmentation
-        seg = imageio.imread(self.segmentations[index])
+        seg = imageio.imread(self.segmentations[index])[:,:,0]
         
         if self.phase == 'train':
             voxel1, voxel2, flow_map, valid2D, img, seg = self.augmentor(voxel1, voxel2, flow_map, valid2D, img, seg)
