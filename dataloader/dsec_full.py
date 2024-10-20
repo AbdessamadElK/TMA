@@ -66,6 +66,9 @@ class DSECfull(data.Dataset):
         #segmentation
         seg = imageio.imread(self.segmentations[index])
 
+        # Ignore the bottom part of the segmentation
+        seg[-20:,:] = 255
+
         #flow
         if self.phase == "train" or self.phase == "trainval":
             

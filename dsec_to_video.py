@@ -23,7 +23,7 @@ import cv2
 
 # Change according to your setting
 INPUT_PATH = "./datasets/dsec_full/trainval"
-OUTPUT_PATH = "C:/users/abdessamad/TMA_DSEC_VIDEO/train"
+OUTPUT_PATH = "C:/users/abdessamad/TMA_DSEC_VIDEO/WARPED_CUT"
 
 OUTPUT_SINGLE = "C:/users/abdessamad/TMA_DSEC_VIDEO/no_aug.mp4"
 
@@ -96,8 +96,7 @@ def dsec_to_vid_separate():
             # segmentation ground truth
             if INCLUDE_SEGMENTATION:
                 seg = imageio.imread(seg_files[idx])
-                seg[:-20,:] = 255
-                seg_vis = segmentation2rgb_19(seg)
+                seg_vis = segmentation2rgb_19(seg[None])[0]
 
                 # seg_mask1 = seg_vis.copy()
                 # seg_mask1[valid2D == 0] = np.array([0, 0, 0])
@@ -307,4 +306,6 @@ if __name__ == "__main__":
 
     # dsec_to_vid_separate()
     # verify_alignement()
-    dsec_to_vid_test(TEST_INPUT, Path("C:/users/abdessamad/TMA_DSEC_VIDEO_TEST"), segmentation=True)
+    # dsec_to_vid_test(TEST_INPUT, Path("C:/users/abdessamad/TMA_DSEC_VIDEO_TEST"), segmentation=True)
+
+    dsec_to_vid_separate()

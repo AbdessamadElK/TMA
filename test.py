@@ -63,7 +63,7 @@ def generate_submission(model, save_path:str, visualize_flow = False, visualizat
     for voxel1, voxel2, seg, submission_coords in bar:
         voxel1 = voxel1[None].cuda()
         voxel2 = voxel2[None].cuda() 
-        seg = segmentation2rgb_19(seg)
+        # seg = segmentation2rgb_19(seg[None])
         flow_pred, _ = model(voxel1, voxel2, seg)
         flow_pred = flow_pred[0].cpu()#[1,2,H,W]
 

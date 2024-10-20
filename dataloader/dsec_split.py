@@ -60,6 +60,9 @@ class DSECsplit(data.Dataset):
 
         #segmentation
         seg = imageio.imread(self.segmentations[index])
+
+        # Ignore the bottom part of the segmentation
+        seg[-20:,:] = 255
         
         if self.phase == 'train':
             voxel1, voxel2, flow_map, valid2D, img, seg = self.augmentor(voxel1, voxel2, flow_map, valid2D, img, seg)

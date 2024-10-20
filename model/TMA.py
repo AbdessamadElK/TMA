@@ -81,7 +81,7 @@ class TMA(nn.Module):
         for i in range(self.split):
             corr_fn = CorrBlock(fmaps[0], fmaps[i+1], num_levels=self.corr_level, radius=self.corr_radius) #[c01,c02,...,c05]
             corr_fn_list.append(corr_fn)
-       
+        
         # Run segmentation network (Low level features branch)
         # features_low = self.resnet_low(fmaps_all)
         # inp = torch.cat([inp, features_low], dim=1)
@@ -122,7 +122,7 @@ class TMA(nn.Module):
         # features_high = torch.cat([net[0], features_high[0]], dim=2)
 
         visualization_output['Events_features'] = fmaps_all[0]
-        visualization_output['Segmentation_features'] = smap[0]
+        # visualization_output['Segmentation_features'] = smap[0]
         visualization_output['Context_features'] = cmap[0]
         visualization_output['GRU_output'] = net[0]
 
