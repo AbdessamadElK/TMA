@@ -70,8 +70,8 @@ class TMA(nn.Module):
         inp = torch.relu(inp)
 
         # Segmentation features
-        smap = self.snet(seg)
-        inp = torch.cat([smap, inp], dim=1)
+        # smap = self.snet(seg)
+        # inp = torch.cat([smap, inp], dim=1)
 
         coords0 = coords_grid(b, h//8, w//8, device=cmap.device)
         coords1 = coords_grid(b, h//8, w//8, device=cmap.device)
