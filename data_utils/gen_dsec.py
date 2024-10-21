@@ -20,7 +20,17 @@ TEMPORAL_BINS = 15
 representation = VoxelGrid((TEMPORAL_BINS, *RESOLUTION), normalize=True)
 
 def rectify_and_write(rect_map, events_curr, events_prev, output_dir, idx):
+
     #rectify events and convert to voxel grids
+    p = events_prev['p']
+    t = events_prev['t']
+    x = events_prev['x']
+    y = events_prev['y']
+    xy_rect = rect_map[y, x]
+    x_rect = xy_rect[:, 0]
+    y_rect = xy_rect[:, 1]
+    events0 = events_to_voxel_grid(x_rect, y_rect, p, t)
+    
     p = events_curr['p']
     t = events_curr['t']
     x = events_curr['x']
@@ -30,20 +40,12 @@ def rectify_and_write(rect_map, events_curr, events_prev, output_dir, idx):
     y_rect = xy_rect[:, 1]
     events1 = events_to_voxel_grid(x_rect, y_rect, p, t)
 
-    p = events_prev['p']
-    t = events_prev['t']
-    x = events_prev['x']
-    y = events_prev['y']
-    xy_rect = rect_map[y, x]
-    x_rect = xy_rect[:, 0]
-    y_rect = xy_rect[:, 1]
-    events0 = events_to_voxel_grid(x_rect, y_rect, p, t)
-
     #write events
     output_name = os.path.join(output_dir, '{:06d}'.format(idx))
     if os.path.exists(output_name):
         return
     np.savez(output_name, events_prev=events0, events_curr=events1)
+    return xy_rect
 
 def events_to_voxel_grid(x, y, p, t):
     t = (t - t[0]).astype('float32')
@@ -59,7 +61,20 @@ def events_to_voxel_grid(x, y, p, t):
         }
     return representation.convert(event_data_torch)
 
-def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, seg_path:'Path|None' = None):
+def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, warp_image = False, seg_path:'Path|None' = None):
+    """
+        Assuming that dsec_path has the following folders:
+            - train_events
+            - train_optical_flow
+            - train_image
+            - train_images_distorted
+            - test_events
+            - test_images
+            - test_images_distorted
+        This function exports the dataset by converting events to voxel grids and saving them as .npz files
+        and by saving the optical flows as .npy files.
+        Optionally, images can be loaded along with their semantic segmentation.
+    """
     assert dsec_path.is_dir()
     assert split.lower() in ['train', 'trainval', 'test']
     if split == 'trainval' : split  = 'train'
@@ -140,7 +155,7 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
             if events_prev == None:
                 print(f'None data can be converted to voxel in {seq} at {i}th timestamps for previous condition!')
                 continue
-            rectify_and_write(rectify_map, events_curr, events_prev, output_dir, save_idx)
+            xy_rect = rectify_and_write(rectify_map, events_curr, events_prev, output_dir, save_idx)
 
             # optical flow
             if split == "train":
@@ -158,8 +173,57 @@ def gen_dsec(dsec_path:Path, split = 'train', images = True, distorted = False, 
                 if not (img.shape[0] == h and img.shape[1] == w):
                     img = cv2.resize(img, (w, h))
 
-                save_path = output_img / '{:06d}.png'.format(save_idx)
-                imageio.imwrite(save_path, img)
+                if warp_image:
+                    # Warp the images to the rectified events domain
+                    # TODO : optimize the warping operation (vector operatinos instead of iteration) 
+                    warped_img = np.zeros(img.shape)
+                    h, w, _ = img.shape
+                    for y in range(h):
+                        for x in range(w):
+                            new_x, new_y = rectify_map[y, x]
+                            if new_x <= 0 or new_y <= 0:
+                                continue
+                            
+                            if new_x >= w or new_y >= h:
+                                continue
+                            
+                            new_x = int(new_x)
+                            new_y = int(new_y)
+
+                            warped_img[new_y, new_x, :] = img[y, x, :]
+
+                    # Interpolate the warped image
+                    # Get empty pixels (pixels that will not be filled after rectification)
+                    # TODO : Target the empty grid instead of all black pixels
+                    warped_img = warped_img.astype('uint8')
+                    gray_image = cv2.cvtColor(warped_img, cv2.COLOR_RGB2GRAY)
+                    _, mask = cv2.threshold(gray_image, 1, 255, cv2.THRESH_BINARY_INV)  # Create mask for inpainting
+
+                    # Perform inpainting using Telea's method
+                    interpolated_image = cv2.inpaint(warped_img, mask, inpaintRadius=1, flags=cv2.INPAINT_NS)
+                    
+                    img = interpolated_image.copy()
+
+                    save_path = output_img / '{:06d}.png'.format(save_idx)
+                    imageio.imwrite(save_path, img)
+
+                    # visualize to verify alignement
+                    img_vis = img.copy()
+                    h, w, _ = img.shape
+
+                    xy_rect = xy_rect[xy_rect[:,0] >=0]
+                    xy_rect = xy_rect[xy_rect[:,0] < w]
+
+                    xy_rect = xy_rect[xy_rect[:,1] >=0]
+                    xy_rect = xy_rect[xy_rect[:,1] < h]
+
+                    x_rect = xy_rect[:,0]
+                    y_rect = xy_rect[:,1]
+
+                    img_vis[y_rect.astype(int), x_rect.astype(int), 0] = 255
+                    vis_path = Path("C:/users/abdessamad/test_warped_vis") / seq
+                    vis_path.mkdir(parents=True, exist_ok=True)
+                    imageio.imwrite(vis_path / "{:06d}.png".format(i), img_vis)
 
             # segmentation
             if seg_path is not None:
@@ -186,6 +250,7 @@ if __name__ == "__main__":
     parser.add_argument("--split", type=str, default="train", help="Dataset split to generate [[train]/test/all]")
     parser.add_argument("-i", "--images", default=False, action="store_true", help="Include images")
     parser.add_argument("-d", "--distorted", default=False, action="store_true", help="Use distorted images (towards events) instead of rectified ones")
+    parser.add_argument("-w", "--warp_image", default=False, action="store_true", help="Warp the images to the rectified events domain")
     parser.add_argument("--segmentation", type=str, default="", help="Path to semantic segmentation")
 
     args = parser.parse_args()
@@ -195,4 +260,4 @@ if __name__ == "__main__":
 
     for split in splits:
         print(f"Generating TMA version of DSEC {split} split :")
-        gen_dsec(args.dsec, split, args.images, args.distorted, seg_path)
+        gen_dsec(args.dsec, split, args.images, args.distorted, args.warp_image, seg_path)

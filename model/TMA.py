@@ -70,8 +70,8 @@ class TMA(nn.Module):
         inp = torch.relu(inp)
 
         # Segmentation features
-        # smap = self.snet(seg)
-        # inp = torch.cat([smap, inp], dim=1)
+        smap = self.snet(seg)
+        inp = torch.cat([smap, inp], dim=1)
 
         coords0 = coords_grid(b, h//8, w//8, device=cmap.device)
         coords1 = coords_grid(b, h//8, w//8, device=cmap.device)
@@ -122,7 +122,7 @@ class TMA(nn.Module):
         # features_high = torch.cat([net[0], features_high[0]], dim=2)
 
         visualization_output['Events_features'] = fmaps_all[0]
-        # visualization_output['Segmentation_features'] = smap[0]
+        visualization_output['Segmentation_features'] = smap[0]
         visualization_output['Context_features'] = cmap[0]
         visualization_output['GRU_output'] = net[0]
 

@@ -64,7 +64,8 @@ def generate_submission(model, save_path:str, visualize_flow = False, visualizat
         voxel1 = voxel1[None].cuda()
         voxel2 = voxel2[None].cuda() 
         # seg = segmentation2rgb_19(seg[None])
-        flow_pred, _ = model(voxel1, voxel2, seg)
+        seg = torch.from_numpy(segmentation2rgb_19(seg[None])).float().permute(0, 3, 1, 2)
+        flow_pred, _ = model(voxel1, voxel2, seg.cuda())
         flow_pred = flow_pred[0].cpu()#[1,2,H,W]
 
         sequence, file_index = submission_coords
